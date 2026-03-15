@@ -11,10 +11,12 @@ const PHOTO_W = 1.3 * S
 const PHOTO_H = 1.2 * S
 const BORDER = 0.15 * S
 const BOTTOM = 0.45 * S
+const PIN_Y = POLAROID_H / 2 - 0.05 * S  // pin is near the top
 
-const DRAG_LERP = 0.12       // how fast the card catches up (lower = more lag)
-const ROTATION_DRAG = 0.08   // how fast rotation settles
-const VELOCITY_TILT = 0.15   // how much velocity tilts the card
+// Physics for the swinging bottom
+const SWING_DAMPING = 0.92
+const SWING_STIFFNESS = 0.06  // spring pulling back to rest
+const SWING_RESPONSE = 3.5    // how much velocity feeds into swing
 
 interface PolaroidProps {
   band: Band
@@ -26,59 +28,55 @@ interface PolaroidProps {
 }
 
 export function Polaroid({ band, position, rotation, genreColor, onDragStart, onDragEnd }: PolaroidProps) {
-  const groupRef = useRef<THREE.Group>(null!)
+  // Pivot group — positioned at the pin point, doesn't rotate
+  const pivotRef = useRef<THREE.Group>(null!)
+  // Card group — child of pivot, rotates around pin
+  const cardRef = useRef<THREE.Group>(null!)
+
   const [hovered, setHovered] = useState(false)
   const draggingRef = useRef(false)
-  const [, setDragTick] = useState(0) // force re-render for cursor
+  const [, setDragTick] = useState(0)
 
   const dragPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0))
   const dragOffset = useRef(new THREE.Vector3())
   const targetPos = useRef(new THREE.Vector3())
-  const prevPos = useRef(new THREE.Vector3())
-  const velocity = useRef(new THREE.Vector2(0, 0))
-  const baseRotation = useRef(rotation)
+
+  const swingAngle = useRef(0)
+  const swingVelocity = useRef(0)
+  const prevPivotX = useRef(position[0])
 
   const { raycaster } = useThree()
 
   useFrame(() => {
-    if (!groupRef.current) return
-    const pos = groupRef.current.position
+    if (!pivotRef.current || !cardRef.current) return
+    const pos = pivotRef.current.position
 
     if (draggingRef.current) {
-      // Lerp position toward target (creates the lag)
       const oldX = pos.x
-      const oldY = pos.y
-      pos.x = THREE.MathUtils.lerp(pos.x, targetPos.current.x, DRAG_LERP)
-      pos.y = THREE.MathUtils.lerp(pos.y, targetPos.current.y, DRAG_LERP)
-
-      // Track velocity for tilt
-      velocity.current.set(pos.x - oldX, pos.y - oldY)
-
-      // Tilt based on horizontal velocity
-      const tiltTarget = baseRotation.current - velocity.current.x * VELOCITY_TILT
-      groupRef.current.rotation.z = THREE.MathUtils.lerp(
-        groupRef.current.rotation.z,
-        tiltTarget,
-        ROTATION_DRAG
-      )
-
-      // Lift up
+      pos.x = THREE.MathUtils.lerp(pos.x, targetPos.current.x, 0.12)
+      pos.y = THREE.MathUtils.lerp(pos.y, targetPos.current.y, 0.12)
       pos.z = THREE.MathUtils.lerp(pos.z, 0.5, 0.15)
-    } else {
-      // Settle rotation back
-      groupRef.current.rotation.z = THREE.MathUtils.lerp(
-        groupRef.current.rotation.z,
-        baseRotation.current,
-        0.08
-      )
 
-      // Z hover / settle
+      // Horizontal acceleration drives the swing
+      const accel = pos.x - oldX
+      swingVelocity.current += accel * SWING_RESPONSE
+    } else {
       const targetZ = hovered ? 0.3 : 0
       pos.z = THREE.MathUtils.lerp(pos.z, targetZ, 0.12)
-
-      // Decay velocity
-      velocity.current.multiplyScalar(0.9)
     }
+
+    // Spring physics — always active so it also swings on hover/settle
+    swingVelocity.current -= swingAngle.current * SWING_STIFFNESS
+    swingVelocity.current *= SWING_DAMPING
+    swingAngle.current += swingVelocity.current
+
+    // Clamp to reasonable range
+    swingAngle.current = THREE.MathUtils.clamp(swingAngle.current, -0.4, 0.4)
+
+    // Apply swing rotation to the card (pivots around top)
+    cardRef.current.rotation.z = rotation + swingAngle.current
+
+    prevPivotX.current = pos.x
   })
 
   const handlePointerDown = useCallback((e: any) => {
@@ -87,10 +85,9 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
     setDragTick((t) => t + 1)
     onDragStart?.()
 
-    const pos = groupRef.current.position
+    const pos = pivotRef.current.position
     dragOffset.current.set(pos.x - e.point.x, pos.y - e.point.y, 0)
     targetPos.current.set(pos.x, pos.y, pos.z)
-    prevPos.current.copy(pos)
 
     e.target?.setPointerCapture?.(e.pointerId)
     document.body.style.cursor = "grabbing"
@@ -104,7 +101,6 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
     raycaster.ray.intersectPlane(dragPlane.current, intersection)
 
     if (intersection) {
-      // Update target — the useFrame lerp will chase it
       targetPos.current.x = intersection.x + dragOffset.current.x
       targetPos.current.y = intersection.y + dragOffset.current.y
     }
@@ -118,65 +114,71 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
     document.body.style.cursor = hovered ? "grab" : "auto"
   }, [onDragEnd, hovered])
 
+  // Pivot is at pin position; card hangs below it
   return (
     <group
-      ref={groupRef}
-      position={position}
-      rotation={[0, 0, rotation]}
+      ref={pivotRef}
+      position={[position[0], position[1] + PIN_Y, position[2]]}
       onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = draggingRef.current ? "grabbing" : "grab" }}
       onPointerOut={() => { if (!draggingRef.current) { setHovered(false); document.body.style.cursor = "auto" } }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
-      {/* White polaroid frame */}
-      <RoundedBox args={[POLAROID_W, POLAROID_H, 0.02]} radius={0.015} smoothness={4}>
-        <meshStandardMaterial color="#f5f0e8" />
-      </RoundedBox>
+      {/* Card body — origin at pin point, card hangs down */}
+      <group ref={cardRef} rotation={[0, 0, rotation]}>
+        {/* Offset everything down so pin point is the rotation origin */}
+        <group position={[0, -PIN_Y, 0]}>
+          {/* White polaroid frame */}
+          <RoundedBox args={[POLAROID_W, POLAROID_H, 0.02]} radius={0.015} smoothness={4}>
+            <meshStandardMaterial color="#f5f0e8" />
+          </RoundedBox>
 
-      {/* Photo area */}
-      <mesh position={[0, (POLAROID_H - PHOTO_H) / 2 - BORDER, 0.011]}>
-        <planeGeometry args={[PHOTO_W, PHOTO_H]} />
-        <meshStandardMaterial color={genreColor} toneMapped={false} />
-      </mesh>
+          {/* Photo area */}
+          <mesh position={[0, (POLAROID_H - PHOTO_H) / 2 - BORDER, 0.011]}>
+            <planeGeometry args={[PHOTO_W, PHOTO_H]} />
+            <meshStandardMaterial color={genreColor} toneMapped={false} />
+          </mesh>
 
-      {/* Darker overlay */}
-      <mesh position={[0, (POLAROID_H - PHOTO_H) / 2 - BORDER, 0.012]}>
-        <planeGeometry args={[PHOTO_W, PHOTO_H]} />
-        <meshStandardMaterial color="#000000" transparent opacity={0.45} />
-      </mesh>
+          {/* Darker overlay */}
+          <mesh position={[0, (POLAROID_H - PHOTO_H) / 2 - BORDER, 0.012]}>
+            <planeGeometry args={[PHOTO_W, PHOTO_H]} />
+            <meshStandardMaterial color="#000000" transparent opacity={0.45} />
+          </mesh>
 
-      {/* Band initial */}
-      <Text
-        position={[0, (POLAROID_H - PHOTO_H) / 2 - BORDER, 0.015]}
-        fontSize={0.4}
-        color="#ffffff"
-        anchorX="center"
-        anchorY="middle"
-        font="/fonts/SpaceMono-Bold.woff"
-        material-transparent
-        material-opacity={0.2}
-      >
-        {band.name.charAt(0)}
-      </Text>
+          {/* Band initial */}
+          <Text
+            position={[0, (POLAROID_H - PHOTO_H) / 2 - BORDER, 0.015]}
+            fontSize={0.4}
+            color="#ffffff"
+            anchorX="center"
+            anchorY="middle"
+            font="/fonts/SpaceMono-Bold.woff"
+            material-transparent
+            material-opacity={0.2}
+          >
+            {band.name.charAt(0)}
+          </Text>
 
-      {/* Band name */}
-      <Text
-        position={[0, -POLAROID_H / 2 + BOTTOM / 2 + 0.01, 0.015]}
-        fontSize={0.065}
-        maxWidth={POLAROID_W - 0.12}
-        color="#1a1a1a"
-        anchorX="center"
-        anchorY="middle"
-        textAlign="center"
-        font="/fonts/SpaceMono-Regular.woff"
-        lineHeight={1.2}
-      >
-        {band.name}
-      </Text>
+          {/* Band name */}
+          <Text
+            position={[0, -POLAROID_H / 2 + BOTTOM / 2 + 0.01, 0.015]}
+            fontSize={0.065}
+            maxWidth={POLAROID_W - 0.12}
+            color="#1a1a1a"
+            anchorX="center"
+            anchorY="middle"
+            textAlign="center"
+            font="/fonts/SpaceMono-Regular.woff"
+            lineHeight={1.2}
+          >
+            {band.name}
+          </Text>
+        </group>
+      </group>
 
-      {/* Pin */}
-      <mesh position={[0, POLAROID_H / 2 - 0.05, 0.04]}>
+      {/* Pin stays fixed at pivot */}
+      <mesh position={[0, 0, 0.04]}>
         <sphereGeometry args={[0.04, 10, 10]} />
         <meshStandardMaterial color="#cc3333" metalness={0.3} roughness={0.4} />
       </mesh>
