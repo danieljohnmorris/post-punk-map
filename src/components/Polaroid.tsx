@@ -12,6 +12,10 @@ const PHOTO_H = 1.2 * S
 const BORDER = 0.15 * S
 const BOTTOM = 0.45 * S
 
+const DRAG_LERP = 0.12       // how fast the card catches up (lower = more lag)
+const ROTATION_DRAG = 0.08   // how fast rotation settles
+const VELOCITY_TILT = 0.15   // how much velocity tilts the card
+
 interface PolaroidProps {
   band: Band
   position: [number, number, number]
@@ -24,66 +28,106 @@ interface PolaroidProps {
 export function Polaroid({ band, position, rotation, genreColor, onDragStart, onDragEnd }: PolaroidProps) {
   const groupRef = useRef<THREE.Group>(null!)
   const [hovered, setHovered] = useState(false)
-  const [dragging, setDragging] = useState(false)
+  const draggingRef = useRef(false)
+  const [, setDragTick] = useState(0) // force re-render for cursor
+
   const dragPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0))
   const dragOffset = useRef(new THREE.Vector3())
-  const { camera, raycaster } = useThree()
+  const targetPos = useRef(new THREE.Vector3())
+  const prevPos = useRef(new THREE.Vector3())
+  const velocity = useRef(new THREE.Vector2(0, 0))
+  const baseRotation = useRef(rotation)
 
-  const targetZ = dragging ? 0.5 : hovered ? 0.3 : 0
+  const { raycaster } = useThree()
 
   useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.position.z = THREE.MathUtils.lerp(
-        groupRef.current.position.z,
-        targetZ,
-        0.15
+    if (!groupRef.current) return
+    const pos = groupRef.current.position
+
+    if (draggingRef.current) {
+      // Lerp position toward target (creates the lag)
+      const oldX = pos.x
+      const oldY = pos.y
+      pos.x = THREE.MathUtils.lerp(pos.x, targetPos.current.x, DRAG_LERP)
+      pos.y = THREE.MathUtils.lerp(pos.y, targetPos.current.y, DRAG_LERP)
+
+      // Track velocity for tilt
+      velocity.current.set(pos.x - oldX, pos.y - oldY)
+
+      // Tilt based on horizontal velocity
+      const tiltTarget = baseRotation.current - velocity.current.x * VELOCITY_TILT
+      groupRef.current.rotation.z = THREE.MathUtils.lerp(
+        groupRef.current.rotation.z,
+        tiltTarget,
+        ROTATION_DRAG
       )
+
+      // Lift up
+      pos.z = THREE.MathUtils.lerp(pos.z, 0.5, 0.15)
+    } else {
+      // Settle rotation back
+      groupRef.current.rotation.z = THREE.MathUtils.lerp(
+        groupRef.current.rotation.z,
+        baseRotation.current,
+        0.08
+      )
+
+      // Z hover / settle
+      const targetZ = hovered ? 0.3 : 0
+      pos.z = THREE.MathUtils.lerp(pos.z, targetZ, 0.12)
+
+      // Decay velocity
+      velocity.current.multiplyScalar(0.9)
     }
   })
 
-  const handlePointerDown = useCallback((e: THREE.Event & { stopPropagation: () => void; point: THREE.Vector3 }) => {
+  const handlePointerDown = useCallback((e: any) => {
     e.stopPropagation()
-    setDragging(true)
+    draggingRef.current = true
+    setDragTick((t) => t + 1)
     onDragStart?.()
 
-    // Calculate offset between pointer and group position
     const pos = groupRef.current.position
     dragOffset.current.set(pos.x - e.point.x, pos.y - e.point.y, 0)
+    targetPos.current.set(pos.x, pos.y, pos.z)
+    prevPos.current.copy(pos)
 
-    // Capture pointer
-    ;(e as any).target?.setPointerCapture?.((e as any).pointerId)
+    e.target?.setPointerCapture?.(e.pointerId)
+    document.body.style.cursor = "grabbing"
   }, [onDragStart])
 
-  const handlePointerMove = useCallback((e: THREE.Event & { stopPropagation: () => void }) => {
-    if (!dragging) return
+  const handlePointerMove = useCallback((e: any) => {
+    if (!draggingRef.current) return
     e.stopPropagation()
 
-    // Intersect with the drag plane
     const intersection = new THREE.Vector3()
     raycaster.ray.intersectPlane(dragPlane.current, intersection)
 
     if (intersection) {
-      groupRef.current.position.x = intersection.x + dragOffset.current.x
-      groupRef.current.position.y = intersection.y + dragOffset.current.y
+      // Update target — the useFrame lerp will chase it
+      targetPos.current.x = intersection.x + dragOffset.current.x
+      targetPos.current.y = intersection.y + dragOffset.current.y
     }
-  }, [dragging, raycaster])
+  }, [raycaster])
 
-  const handlePointerUp = useCallback((e: THREE.Event & { stopPropagation: () => void }) => {
+  const handlePointerUp = useCallback((e: any) => {
     e.stopPropagation()
-    setDragging(false)
+    draggingRef.current = false
+    setDragTick((t) => t + 1)
     onDragEnd?.()
-  }, [onDragEnd])
+    document.body.style.cursor = hovered ? "grab" : "auto"
+  }, [onDragEnd, hovered])
 
   return (
     <group
       ref={groupRef}
       position={position}
       rotation={[0, 0, rotation]}
-      onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = dragging ? "grabbing" : "grab" }}
-      onPointerOut={() => { if (!dragging) { setHovered(false); document.body.style.cursor = "auto" } }}
-      onPointerDown={handlePointerDown as any}
-      onPointerMove={handlePointerMove as any}
-      onPointerUp={handlePointerUp as any}
+      onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = draggingRef.current ? "grabbing" : "grab" }}
+      onPointerOut={() => { if (!draggingRef.current) { setHovered(false); document.body.style.cursor = "auto" } }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
     >
       {/* White polaroid frame */}
       <RoundedBox args={[POLAROID_W, POLAROID_H, 0.02]} radius={0.015} smoothness={4}>
