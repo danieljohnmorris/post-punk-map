@@ -1,5 +1,5 @@
-import { useRef, useState, useCallback } from "react"
-import { Text, RoundedBox } from "@react-three/drei"
+import { useRef, useState, useCallback, useMemo } from "react"
+import { Text } from "@react-three/drei"
 import * as THREE from "three"
 import { useFrame, useThree } from "@react-three/fiber"
 import type { Band } from "../data/bands"
@@ -11,15 +11,24 @@ const PHOTO_W = 1.3 * S
 const PHOTO_H = 1.2 * S
 const BORDER = 0.15 * S
 const BOTTOM = 0.45 * S
-const PIN_Y = POLAROID_H / 2 - 0.05 * S  // pin is near the top
+const PIN_Y = POLAROID_H / 2 - 0.05 * S
 
-// Physics — pendulum swinging from the pin
-const SWING_DAMPING = 0.985    // very low friction — swings for ages
-const SWING_STIFFNESS = 0.015  // very soft spring — wide lazy arcs
-const SWING_RESPONSE = 12.0    // super reactive to cursor movement
-const GRAVITY = 0.008          // stronger gravity pull back to center
-const DRAG_LERP_SPEED = 0.05   // very slow chase — lots of float/lag
-const IDLE_BREEZE = 0.0003     // subtle ambient sway when idle
+// Physics
+const SWING_DAMPING = 0.985
+const SWING_STIFFNESS = 0.015
+const SWING_RESPONSE = 12.0
+const GRAVITY = 0.008
+const DRAG_LERP_SPEED = 0.05
+const IDLE_BREEZE = 0.0003
+
+// Darken a hex color by mixing with black
+function darkenColor(hex: string, amount: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  const f = 1 - amount
+  return `rgb(${Math.round(r * f)}, ${Math.round(g * f)}, ${Math.round(b * f)})`
+}
 
 interface PolaroidProps {
   band: Band
@@ -31,9 +40,7 @@ interface PolaroidProps {
 }
 
 export function Polaroid({ band, position, rotation, genreColor, onDragStart, onDragEnd }: PolaroidProps) {
-  // Pivot group — positioned at the pin point, doesn't rotate
   const pivotRef = useRef<THREE.Group>(null!)
-  // Card group — child of pivot, rotates around pin
   const cardRef = useRef<THREE.Group>(null!)
 
   const [hovered, setHovered] = useState(false)
@@ -46,9 +53,11 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
 
   const swingAngle = useRef(0)
   const swingVelocity = useRef(0)
-  const prevPivotX = useRef(position[0])
 
   const { raycaster } = useThree()
+
+  // Pre-compute darkened color so we don't need an overlay plane
+  const photoColor = useMemo(() => darkenColor(genreColor, 0.45), [genreColor])
 
   useFrame((state) => {
     if (!pivotRef.current || !cardRef.current) return
@@ -59,12 +68,10 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
       const oldX = pos.x
       const oldY = pos.y
 
-      // Very slow chase — card floats behind cursor
       pos.x = THREE.MathUtils.lerp(pos.x, targetPos.current.x, DRAG_LERP_SPEED)
       pos.y = THREE.MathUtils.lerp(pos.y, targetPos.current.y, DRAG_LERP_SPEED)
       pos.z = THREE.MathUtils.lerp(pos.z, 0.6, 0.08)
 
-      // Acceleration drives the swing hard
       const accelX = pos.x - oldX
       const accelY = pos.y - oldY
       swingVelocity.current += accelX * SWING_RESPONSE
@@ -73,7 +80,7 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
       const targetZ = hovered ? 0.25 : 0
       pos.z = THREE.MathUtils.lerp(pos.z, targetZ, 0.06)
 
-      // Ambient breeze — each card gets a unique phase from its position
+      // Ambient breeze
       const phase = position[0] * 3.7 + position[1] * 2.3
       const breeze = Math.sin(t * 0.8 + phase) * IDLE_BREEZE
         + Math.sin(t * 1.3 + phase * 0.7) * IDLE_BREEZE * 0.5
@@ -85,13 +92,9 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
     swingVelocity.current -= Math.sin(swingAngle.current) * GRAVITY
     swingVelocity.current *= SWING_DAMPING
     swingAngle.current += swingVelocity.current
-
-    // Allow wide swings
     swingAngle.current = THREE.MathUtils.clamp(swingAngle.current, -0.8, 0.8)
 
     cardRef.current.rotation.z = rotation + swingAngle.current
-
-    prevPivotX.current = pos.x
   })
 
   const handlePointerDown = useCallback((e: any) => {
@@ -129,7 +132,8 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
     document.body.style.cursor = hovered ? "grab" : "auto"
   }, [onDragEnd, hovered])
 
-  // Pivot is at pin position; card hangs below it
+  const photoY = (POLAROID_H - PHOTO_H) / 2 - BORDER
+
   return (
     <group
       ref={pivotRef}
@@ -140,44 +144,42 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
-      {/* Card body — origin at pin point, card hangs down */}
       <group ref={cardRef} rotation={[0, 0, rotation]}>
-        {/* Offset everything down so pin point is the rotation origin */}
         <group position={[0, -PIN_Y, 0]}>
-          {/* White polaroid frame */}
-          <RoundedBox args={[POLAROID_W, POLAROID_H, 0.02]} radius={0.015} smoothness={4}>
-            <meshStandardMaterial color="#f5f0e8" />
-          </RoundedBox>
-
-          {/* Photo area */}
-          <mesh position={[0, (POLAROID_H - PHOTO_H) / 2 - BORDER, 0.011]}>
-            <planeGeometry args={[PHOTO_W, PHOTO_H]} />
-            <meshStandardMaterial color={genreColor} toneMapped={false} />
+          {/* White polaroid card — single box, no separate planes fighting */}
+          <mesh>
+            <boxGeometry args={[POLAROID_W, POLAROID_H, 0.02]} />
+            <meshStandardMaterial color="#f0ebe0" />
           </mesh>
 
-          {/* Darker overlay */}
-          <mesh position={[0, (POLAROID_H - PHOTO_H) / 2 - BORDER, 0.012]}>
+          {/* Photo area — single plane, no overlay needed */}
+          <mesh position={[0, photoY, 0.011]}>
             <planeGeometry args={[PHOTO_W, PHOTO_H]} />
-            <meshStandardMaterial color="#000000" transparent opacity={0.45} />
+            <meshStandardMaterial
+              color={photoColor}
+              polygonOffset
+              polygonOffsetFactor={-1}
+            />
           </mesh>
 
           {/* Band initial */}
           <Text
-            position={[0, (POLAROID_H - PHOTO_H) / 2 - BORDER, 0.015]}
-            fontSize={0.4}
+            position={[0, photoY, 0.02]}
+            fontSize={0.35}
             color="#ffffff"
             anchorX="center"
             anchorY="middle"
             font="/fonts/SpaceMono-Bold.woff"
             material-transparent
-            material-opacity={0.2}
+            material-opacity={0.15}
+            material-depthWrite={false}
           >
             {band.name.charAt(0)}
           </Text>
 
           {/* Band name */}
           <Text
-            position={[0, -POLAROID_H / 2 + BOTTOM / 2 + 0.01, 0.015]}
+            position={[0, -POLAROID_H / 2 + BOTTOM / 2 + 0.01, 0.02]}
             fontSize={0.065}
             maxWidth={POLAROID_W - 0.12}
             color="#1a1a1a"
@@ -186,15 +188,16 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
             textAlign="center"
             font="/fonts/SpaceMono-Regular.woff"
             lineHeight={1.2}
+            material-depthWrite={false}
           >
             {band.name}
           </Text>
         </group>
       </group>
 
-      {/* Pin stays fixed at pivot */}
-      <mesh position={[0, 0, 0.04]}>
-        <sphereGeometry args={[0.04, 10, 10]} />
+      {/* Pin */}
+      <mesh position={[0, 0, 0.03]}>
+        <sphereGeometry args={[0.04, 8, 8]} />
         <meshStandardMaterial color="#cc3333" metalness={0.3} roughness={0.4} />
       </mesh>
     </group>

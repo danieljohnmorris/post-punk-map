@@ -70,7 +70,7 @@ export function Scene() {
     <Canvas
       camera={{ position: [0, 0, 45], fov: 50 }}
       style={{ background: "#0f0d0a" }}
-      gl={{ antialias: true }}
+      gl={{ antialias: true, logarithmicDepthBuffer: true }}
     >
       <Board />
     </Canvas>
