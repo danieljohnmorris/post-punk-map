@@ -1,22 +1,24 @@
 export interface Band {
   name: string
   year: number
-  genre: string
-  color?: string
 }
 
 export interface Genre {
   name: string
   color: string
+  row: number
   bands: Band[]
-  position: [number, number]
 }
 
+export const MIN_YEAR = 1973
+export const MAX_YEAR = 2020
+
+// Genres ordered top-to-bottom as rows
 export const genres: Genre[] = [
   {
     name: "Early Post-Punk",
     color: "#c43e3e",
-    position: [-7.5, 4],
+    row: 0,
     bands: [
       { name: "Joy Division", year: 1976 },
       { name: "Siouxsie and\nthe Banshees", year: 1976 },
@@ -31,7 +33,7 @@ export const genres: Genre[] = [
   {
     name: "Gothic / Darkwave",
     color: "#6b2fa0",
-    position: [7.5, 4],
+    row: 1,
     bands: [
       { name: "Bauhaus", year: 1978 },
       { name: "The Cure", year: 1976 },
@@ -43,9 +45,22 @@ export const genres: Genre[] = [
     ],
   },
   {
+    name: "No Wave",
+    color: "#b58b2a",
+    row: 2,
+    bands: [
+      { name: "Sonic Youth", year: 1981 },
+      { name: "Swans", year: 1982 },
+      { name: "DNA", year: 1978 },
+      { name: "Mars", year: 1975 },
+      { name: "Teenage Jesus\nand the Jerks", year: 1977 },
+      { name: "James Chance", year: 1977 },
+    ],
+  },
+  {
     name: "Synth Post-Punk",
     color: "#2a7eb5",
-    position: [-7.5, -4],
+    row: 3,
     bands: [
       { name: "Depeche Mode", year: 1980 },
       { name: "New Order", year: 1980 },
@@ -57,22 +72,9 @@ export const genres: Genre[] = [
     ],
   },
   {
-    name: "No Wave",
-    color: "#b58b2a",
-    position: [0, 4],
-    bands: [
-      { name: "Sonic Youth", year: 1981 },
-      { name: "Swans", year: 1982 },
-      { name: "DNA", year: 1978 },
-      { name: "Mars", year: 1975 },
-      { name: "Teenage Jesus\nand the Jerks", year: 1977 },
-      { name: "James Chance", year: 1977 },
-    ],
-  },
-  {
     name: "Post-Punk Revival",
     color: "#3ea06b",
-    position: [7.5, -4],
+    row: 4,
     bands: [
       { name: "Interpol", year: 1997 },
       { name: "Editors", year: 2002 },
@@ -85,7 +87,7 @@ export const genres: Genre[] = [
   {
     name: "Modern Post-Punk",
     color: "#b55a2a",
-    position: [0, -4],
+    row: 5,
     bands: [
       { name: "Fontaines D.C.", year: 2017 },
       { name: "Shame", year: 2014 },

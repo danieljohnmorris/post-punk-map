@@ -3,7 +3,7 @@ import { MapControls, Text } from "@react-three/drei"
 import { Corkboard } from "./Corkboard"
 import { Frame } from "./Frame"
 import { GenreCluster } from "./GenreCluster"
-import { StringConnections } from "./StringConnections"
+import { Timeline } from "./Timeline"
 import { genres } from "../data/bands"
 
 export function Scene() {
@@ -19,15 +19,15 @@ export function Scene() {
 
       <Corkboard />
       <Frame />
-      <StringConnections />
+      <Timeline />
 
       {genres.map((genre) => (
         <GenreCluster key={genre.name} genre={genre} />
       ))}
 
-      {/* Title - pinned to top of corkboard */}
+      {/* Title */}
       <Text
-        position={[0, 11, 0.1]}
+        position={[0, 12.2, 0.1]}
         fontSize={0.7}
         color="#f5f0e8"
         anchorX="center"
@@ -40,22 +40,14 @@ export function Scene() {
         POST-PUNK MAP
       </Text>
 
-      <Text
-        position={[0, 10.2, 0.1]}
-        fontSize={0.2}
-        color="#c0b090"
-        anchorX="center"
-        anchorY="middle"
-        font="/fonts/SpaceMono-Regular.woff"
-      >
-        {"1976 \u2014 present"}
-      </Text>
-
       <MapControls
         enableRotate={false}
-        minDistance={5}
-        maxDistance={30}
+        minDistance={3}
+        maxDistance={35}
         panSpeed={1.5}
+        zoomSpeed={1.2}
+        enableDamping
+        dampingFactor={0.1}
       />
     </Canvas>
   )
