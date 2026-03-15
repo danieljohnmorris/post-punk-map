@@ -23,9 +23,11 @@ export function yearToX(year: number): number {
 
 interface GenreClusterProps {
   genre: Genre
+  onDragStart?: () => void
+  onDragEnd?: () => void
 }
 
-export function GenreCluster({ genre }: GenreClusterProps) {
+export function GenreCluster({ genre, onDragStart, onDragEnd }: GenreClusterProps) {
   const rowY = BOARD_H / 2 - MARGIN_TOP - genre.row * ROW_H - ROW_H / 2
 
   const placements = useMemo(() => {
@@ -91,6 +93,8 @@ export function GenreCluster({ genre }: GenreClusterProps) {
           position={position}
           rotation={rotation}
           genreColor={genre.color}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
         />
       ))}
     </group>

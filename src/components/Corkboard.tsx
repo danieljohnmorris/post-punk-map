@@ -43,7 +43,7 @@ export function Corkboard() {
     const texture = new THREE.CanvasTexture(canvas)
     texture.wrapS = THREE.RepeatWrapping
     texture.wrapT = THREE.RepeatWrapping
-    texture.repeat.set(4, 3)
+    texture.repeat.set(20, 20)
 
     return new THREE.MeshStandardMaterial({
       map: texture,
@@ -63,7 +63,7 @@ export function Corkboard() {
 
   return (
     <mesh ref={meshRef} position={[0, 0, -0.1]}>
-      <planeGeometry args={[36, 24]} />
+      <planeGeometry args={[200, 200]} />
       <primitive object={material} attach="material" />
     </mesh>
   )

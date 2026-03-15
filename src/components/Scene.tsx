@@ -1,28 +1,42 @@
+import { useRef, useState } from "react"
 import { Canvas } from "@react-three/fiber"
 import { MapControls, Text } from "@react-three/drei"
 import { Corkboard } from "./Corkboard"
-import { Frame } from "./Frame"
 import { GenreCluster } from "./GenreCluster"
 import { Timeline } from "./Timeline"
 import { genres } from "../data/bands"
+import type { MapControls as MapControlsImpl } from "three/addons/controls/MapControls.js"
 
-export function Scene() {
+function Board() {
+  const controlsRef = useRef<MapControlsImpl>(null!)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleDragStart = () => {
+    setIsDragging(true)
+    if (controlsRef.current) controlsRef.current.enabled = false
+  }
+
+  const handleDragEnd = () => {
+    setIsDragging(false)
+    if (controlsRef.current) controlsRef.current.enabled = true
+  }
+
   return (
-    <Canvas
-      camera={{ position: [0, 1, 24], fov: 50 }}
-      style={{ background: "#0f0d0a" }}
-      gl={{ antialias: true }}
-    >
+    <>
       <ambientLight intensity={0.6} />
       <directionalLight position={[5, 5, 10]} intensity={0.8} />
       <pointLight position={[-5, 3, 5]} intensity={0.3} color="#ffcc88" />
 
       <Corkboard />
-      <Frame />
       <Timeline />
 
       {genres.map((genre) => (
-        <GenreCluster key={genre.name} genre={genre} />
+        <GenreCluster
+          key={genre.name}
+          genre={genre}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        />
       ))}
 
       {/* Title */}
@@ -41,6 +55,7 @@ export function Scene() {
       </Text>
 
       <MapControls
+        ref={controlsRef}
         enableRotate={false}
         minDistance={3}
         maxDistance={35}
@@ -49,6 +64,18 @@ export function Scene() {
         enableDamping
         dampingFactor={0.1}
       />
+    </>
+  )
+}
+
+export function Scene() {
+  return (
+    <Canvas
+      camera={{ position: [0, 1, 24], fov: 50 }}
+      style={{ background: "#0f0d0a" }}
+      gl={{ antialias: true }}
+    >
+      <Board />
     </Canvas>
   )
 }

@@ -1,10 +1,10 @@
-import { useRef, useState } from "react"
+import { useRef, useState, useCallback } from "react"
 import { Text, RoundedBox } from "@react-three/drei"
 import * as THREE from "three"
-import { useFrame } from "@react-three/fiber"
+import { useFrame, useThree } from "@react-three/fiber"
 import type { Band } from "../data/bands"
 
-const S = 0.55 // scale factor
+const S = 0.55
 const POLAROID_W = 1.6 * S
 const POLAROID_H = 2.0 * S
 const PHOTO_W = 1.3 * S
@@ -17,30 +17,73 @@ interface PolaroidProps {
   position: [number, number, number]
   rotation: number
   genreColor: string
+  onDragStart?: () => void
+  onDragEnd?: () => void
 }
 
-export function Polaroid({ band, position, rotation, genreColor }: PolaroidProps) {
+export function Polaroid({ band, position, rotation, genreColor, onDragStart, onDragEnd }: PolaroidProps) {
   const groupRef = useRef<THREE.Group>(null!)
   const [hovered, setHovered] = useState(false)
-  const targetZ = hovered ? 0.4 : 0
+  const [dragging, setDragging] = useState(false)
+  const dragPlane = useRef(new THREE.Plane(new THREE.Vector3(0, 0, 1), 0))
+  const dragOffset = useRef(new THREE.Vector3())
+  const { camera, raycaster } = useThree()
+
+  const targetZ = dragging ? 0.5 : hovered ? 0.3 : 0
 
   useFrame(() => {
     if (groupRef.current) {
       groupRef.current.position.z = THREE.MathUtils.lerp(
         groupRef.current.position.z,
         targetZ,
-        0.1
+        0.15
       )
     }
   })
+
+  const handlePointerDown = useCallback((e: THREE.Event & { stopPropagation: () => void; point: THREE.Vector3 }) => {
+    e.stopPropagation()
+    setDragging(true)
+    onDragStart?.()
+
+    // Calculate offset between pointer and group position
+    const pos = groupRef.current.position
+    dragOffset.current.set(pos.x - e.point.x, pos.y - e.point.y, 0)
+
+    // Capture pointer
+    ;(e as any).target?.setPointerCapture?.((e as any).pointerId)
+  }, [onDragStart])
+
+  const handlePointerMove = useCallback((e: THREE.Event & { stopPropagation: () => void }) => {
+    if (!dragging) return
+    e.stopPropagation()
+
+    // Intersect with the drag plane
+    const intersection = new THREE.Vector3()
+    raycaster.ray.intersectPlane(dragPlane.current, intersection)
+
+    if (intersection) {
+      groupRef.current.position.x = intersection.x + dragOffset.current.x
+      groupRef.current.position.y = intersection.y + dragOffset.current.y
+    }
+  }, [dragging, raycaster])
+
+  const handlePointerUp = useCallback((e: THREE.Event & { stopPropagation: () => void }) => {
+    e.stopPropagation()
+    setDragging(false)
+    onDragEnd?.()
+  }, [onDragEnd])
 
   return (
     <group
       ref={groupRef}
       position={position}
       rotation={[0, 0, rotation]}
-      onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = "pointer" }}
-      onPointerOut={() => { setHovered(false); document.body.style.cursor = "auto" }}
+      onPointerOver={(e) => { e.stopPropagation(); setHovered(true); document.body.style.cursor = dragging ? "grabbing" : "grab" }}
+      onPointerOut={() => { if (!dragging) { setHovered(false); document.body.style.cursor = "auto" } }}
+      onPointerDown={handlePointerDown as any}
+      onPointerMove={handlePointerMove as any}
+      onPointerUp={handlePointerUp as any}
     >
       {/* White polaroid frame */}
       <RoundedBox args={[POLAROID_W, POLAROID_H, 0.02]} radius={0.015} smoothness={4}>
