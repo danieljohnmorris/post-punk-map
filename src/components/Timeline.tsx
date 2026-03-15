@@ -1,12 +1,10 @@
 import { Text } from "@react-three/drei"
-import { yearToX } from "./GenreCluster"
+import { yearToX, BOARD_H, BOARD_W } from "./GenreCluster"
 import { MIN_YEAR, MAX_YEAR } from "../data/bands"
 
-const BOARD_H = 22
-const TICK_Y = BOARD_H / 2 - 1.2
+const TICK_Y = BOARD_H / 2 - 1
 
 export function Timeline() {
-  // Major ticks every 5 years, minor every year
   const majorYears: number[] = []
   const minorYears: number[] = []
 
@@ -22,18 +20,17 @@ export function Timeline() {
     <group>
       {/* Axis line */}
       <mesh position={[0, TICK_Y, 0.01]}>
-        <planeGeometry args={[30, 0.008]} />
+        <planeGeometry args={[BOARD_W - 4, 0.008]} />
         <meshStandardMaterial color="#c0b090" transparent opacity={0.5} />
       </mesh>
 
-      {/* Major year labels */}
       {majorYears.map((year) => {
         const x = yearToX(year)
         return (
           <group key={year}>
             <Text
-              position={[x, TICK_Y + 0.35, 0.02]}
-              fontSize={0.2}
+              position={[x, TICK_Y + 0.4, 0.02]}
+              fontSize={0.22}
               color="#d4c4a0"
               anchorX="center"
               anchorY="middle"
@@ -41,7 +38,6 @@ export function Timeline() {
             >
               {String(year)}
             </Text>
-            {/* Tick mark */}
             <mesh position={[x, TICK_Y - 0.15, 0.01]}>
               <planeGeometry args={[0.008, 0.3]} />
               <meshStandardMaterial color="#c0b090" transparent opacity={0.4} />
@@ -50,7 +46,6 @@ export function Timeline() {
         )
       })}
 
-      {/* Minor tick marks */}
       {minorYears.map((year) => {
         const x = yearToX(year)
         return (
