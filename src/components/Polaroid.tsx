@@ -14,9 +14,11 @@ const BOTTOM = 0.45 * S
 const PIN_Y = POLAROID_H / 2 - 0.05 * S  // pin is near the top
 
 // Physics for the swinging bottom
-const SWING_DAMPING = 0.92
-const SWING_STIFFNESS = 0.06  // spring pulling back to rest
-const SWING_RESPONSE = 3.5    // how much velocity feeds into swing
+const SWING_DAMPING = 0.96     // less friction — swings longer
+const SWING_STIFFNESS = 0.03   // softer spring — wider arcs
+const SWING_RESPONSE = 6.0     // more sensitive to movement
+const GRAVITY = 0.004          // gentle pull downward (settles to vertical)
+const DRAG_LERP_SPEED = 0.08   // slower chase — more float
 
 interface PolaroidProps {
   band: Band
@@ -53,25 +55,32 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
 
     if (draggingRef.current) {
       const oldX = pos.x
-      pos.x = THREE.MathUtils.lerp(pos.x, targetPos.current.x, 0.12)
-      pos.y = THREE.MathUtils.lerp(pos.y, targetPos.current.y, 0.12)
-      pos.z = THREE.MathUtils.lerp(pos.z, 0.5, 0.15)
+      const oldY = pos.y
 
-      // Horizontal acceleration drives the swing
-      const accel = pos.x - oldX
-      swingVelocity.current += accel * SWING_RESPONSE
+      // Slower lerp = more float/lag
+      pos.x = THREE.MathUtils.lerp(pos.x, targetPos.current.x, DRAG_LERP_SPEED)
+      pos.y = THREE.MathUtils.lerp(pos.y, targetPos.current.y, DRAG_LERP_SPEED)
+      pos.z = THREE.MathUtils.lerp(pos.z, 0.5, 0.1)
+
+      // Both horizontal and vertical acceleration feed into swing
+      const accelX = pos.x - oldX
+      const accelY = pos.y - oldY
+      swingVelocity.current += accelX * SWING_RESPONSE
+      // Vertical movement adds a subtle wobble too
+      swingVelocity.current += accelY * SWING_RESPONSE * 0.3
     } else {
       const targetZ = hovered ? 0.3 : 0
-      pos.z = THREE.MathUtils.lerp(pos.z, targetZ, 0.12)
+      pos.z = THREE.MathUtils.lerp(pos.z, targetZ, 0.08)
     }
 
-    // Spring physics — always active so it also swings on hover/settle
+    // Spring + gravity — gravity pulls angle toward 0 (hanging straight)
     swingVelocity.current -= swingAngle.current * SWING_STIFFNESS
+    swingVelocity.current -= Math.sin(swingAngle.current) * GRAVITY
     swingVelocity.current *= SWING_DAMPING
     swingAngle.current += swingVelocity.current
 
-    // Clamp to reasonable range
-    swingAngle.current = THREE.MathUtils.clamp(swingAngle.current, -0.4, 0.4)
+    // Wider swing range
+    swingAngle.current = THREE.MathUtils.clamp(swingAngle.current, -0.6, 0.6)
 
     // Apply swing rotation to the card (pivots around top)
     cardRef.current.rotation.z = rotation + swingAngle.current
