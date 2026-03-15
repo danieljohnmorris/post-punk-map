@@ -13,12 +13,13 @@ const BORDER = 0.15 * S
 const BOTTOM = 0.45 * S
 const PIN_Y = POLAROID_H / 2 - 0.05 * S  // pin is near the top
 
-// Physics for the swinging bottom
-const SWING_DAMPING = 0.96     // less friction — swings longer
-const SWING_STIFFNESS = 0.03   // softer spring — wider arcs
-const SWING_RESPONSE = 6.0     // more sensitive to movement
-const GRAVITY = 0.004          // gentle pull downward (settles to vertical)
-const DRAG_LERP_SPEED = 0.08   // slower chase — more float
+// Physics — pendulum swinging from the pin
+const SWING_DAMPING = 0.985    // very low friction — swings for ages
+const SWING_STIFFNESS = 0.015  // very soft spring — wide lazy arcs
+const SWING_RESPONSE = 12.0    // super reactive to cursor movement
+const GRAVITY = 0.008          // stronger gravity pull back to center
+const DRAG_LERP_SPEED = 0.05   // very slow chase — lots of float/lag
+const IDLE_BREEZE = 0.0003     // subtle ambient sway when idle
 
 interface PolaroidProps {
   band: Band
@@ -49,40 +50,45 @@ export function Polaroid({ band, position, rotation, genreColor, onDragStart, on
 
   const { raycaster } = useThree()
 
-  useFrame(() => {
+  useFrame((state) => {
     if (!pivotRef.current || !cardRef.current) return
     const pos = pivotRef.current.position
+    const t = state.clock.elapsedTime
 
     if (draggingRef.current) {
       const oldX = pos.x
       const oldY = pos.y
 
-      // Slower lerp = more float/lag
+      // Very slow chase — card floats behind cursor
       pos.x = THREE.MathUtils.lerp(pos.x, targetPos.current.x, DRAG_LERP_SPEED)
       pos.y = THREE.MathUtils.lerp(pos.y, targetPos.current.y, DRAG_LERP_SPEED)
-      pos.z = THREE.MathUtils.lerp(pos.z, 0.5, 0.1)
+      pos.z = THREE.MathUtils.lerp(pos.z, 0.6, 0.08)
 
-      // Both horizontal and vertical acceleration feed into swing
+      // Acceleration drives the swing hard
       const accelX = pos.x - oldX
       const accelY = pos.y - oldY
       swingVelocity.current += accelX * SWING_RESPONSE
-      // Vertical movement adds a subtle wobble too
-      swingVelocity.current += accelY * SWING_RESPONSE * 0.3
+      swingVelocity.current += accelY * SWING_RESPONSE * 0.4
     } else {
-      const targetZ = hovered ? 0.3 : 0
-      pos.z = THREE.MathUtils.lerp(pos.z, targetZ, 0.08)
+      const targetZ = hovered ? 0.25 : 0
+      pos.z = THREE.MathUtils.lerp(pos.z, targetZ, 0.06)
+
+      // Ambient breeze — each card gets a unique phase from its position
+      const phase = position[0] * 3.7 + position[1] * 2.3
+      const breeze = Math.sin(t * 0.8 + phase) * IDLE_BREEZE
+        + Math.sin(t * 1.3 + phase * 0.7) * IDLE_BREEZE * 0.5
+      swingVelocity.current += breeze
     }
 
-    // Spring + gravity — gravity pulls angle toward 0 (hanging straight)
+    // Pendulum physics
     swingVelocity.current -= swingAngle.current * SWING_STIFFNESS
     swingVelocity.current -= Math.sin(swingAngle.current) * GRAVITY
     swingVelocity.current *= SWING_DAMPING
     swingAngle.current += swingVelocity.current
 
-    // Wider swing range
-    swingAngle.current = THREE.MathUtils.clamp(swingAngle.current, -0.6, 0.6)
+    // Allow wide swings
+    swingAngle.current = THREE.MathUtils.clamp(swingAngle.current, -0.8, 0.8)
 
-    // Apply swing rotation to the card (pivots around top)
     cardRef.current.rotation.z = rotation + swingAngle.current
 
     prevPivotX.current = pos.x
