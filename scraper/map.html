@@ -144,6 +144,40 @@
       padding: 8px 16px 16px;
     }
 
+    #filter-bar {
+      position: fixed;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: min(700px, 95vw);
+    }
+
+    .filter-select {
+      background: rgba(10,10,10,0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid #333;
+      color: #888;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .filter-select:hover { border-color: #555; color: #ccc; }
+    .filter-select.active { border-color: #f05; color: #f05; }
+    .filter-select option { background: #111; color: #ccc; }
+
     @keyframes pulse {
       0%, 100% { opacity: 0.3; }
       50% { opacity: 1; }
@@ -185,6 +219,14 @@
     <div id="search-count">0 tags</div>
   </div>
 
+  <div id="filter-bar">
+    <select class="filter-select" id="filter-country"><option value="">country</option></select>
+    <select class="filter-select" id="filter-decade"><option value="">decade</option></select>
+    <select class="filter-select" id="filter-label"><option value="">label</option></select>
+    <select class="filter-select" id="filter-mood"><option value="">mood</option></select>
+    <select class="filter-select" id="filter-vocalist"><option value="">vocalist</option></select>
+  </div>
+
   <div id="tooltip">
     <div class="tt-name"></div>
     <div class="tt-count"></div>
@@ -211,6 +253,9 @@
     let nodes = [];
     let links = [];
     let bandsByTag = {};
+    let facets = {};        // { countries, decades, labels, moods, vocalists }
+    let activeFilter = null; // { category: "country", value: "british", genreSet: Set }
+    let filterHighlight = new Set(); // genre tag ids to highlight
 
     // Camera
     let camX = 0, camY = 0, camZoom = 0.5;
@@ -261,6 +306,8 @@
       });
 
       bandsByTag = data.bandsByTag || {};
+      facets = data.facets || {};
+      populateFilters();
 
       // Center camera on initially visible nodes (tier 0+1) not all nodes
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
@@ -308,6 +355,7 @@
 
     function isNodeVisible(node) {
       if (searchQuery && searchMatches.has(node.id)) return true;
+      if (activeFilter && filterHighlight.has(node.id)) return true;
       return node.tier <= visibleTier();
     }
 
@@ -351,7 +399,8 @@
           const s1 = worldToScreen(ns.x, ns.y);
           const s2 = worldToScreen(nt.x, nt.y);
           const isHighlighted = selectedTag && selectedLinkSet.has(l.src + "|" + l.tgt);
-          if (selectedTag && !isHighlighted) {
+          var bothFilterMatch = activeFilter && filterHighlight.has(nodes[l.src].id) && filterHighlight.has(nodes[l.tgt].id);
+          if ((selectedTag && !isHighlighted) || (activeFilter && !bothFilterMatch && !isHighlighted)) {
             // Dim non-related links when a tag is selected
             ctx.strokeStyle = "rgba(255,255,255,0.015)";
             ctx.lineWidth = Math.max(0.2, 0.3 * camZoom);
@@ -389,13 +438,16 @@
         const isSelected = node.id === selectedTag;
         const isNeighbor = selectedTag && selectedNeighbors.has(node.id);
         const isSearchMatch = searchQuery && searchMatches.has(node.id);
-        const isDimmed = selectedTag && !isSelected && !isNeighbor;
+        const isFilterMatch = activeFilter && filterHighlight.has(node.id);
+        const isFilterDimmed = activeFilter && !isFilterMatch && !isSelected && !isNeighbor;
+        const isDimmed = (selectedTag && !isSelected && !isNeighbor) || isFilterDimmed;
 
         // Node dot
         var dotColor;
         if (isSelected) dotColor = "#fff";
         else if (isSearchMatch) dotColor = "#ff0";
         else if (isNeighbor) dotColor = "#ff6090";
+        else if (isFilterMatch) dotColor = "#0f0";
         else if (isHovered) dotColor = "#ff4488";
         else if (isDimmed) dotColor = "rgba(255,0,85,0.12)";
         else {
@@ -430,6 +482,7 @@
           if (isSelected) labelColor = "#ffffff";
           else if (isSearchMatch) labelColor = "rgba(255,255,0,0.9)";
           else if (isNeighbor) labelColor = "rgba(255,96,144,0.9)";
+          else if (isFilterMatch) labelColor = "rgba(0,255,0,0.9)";
           else if (isHovered) labelColor = "rgba(255,68,136,0.95)";
           else if (isDimmed) labelColor = "rgba(255,0,85,0.1)";
           else {
@@ -747,6 +800,75 @@
       document.getElementById("info-zoom").textContent =
         "zoom: " + camZoom.toFixed(2) + "x | showing: " + visible + " tags (tier 0-" + vt + ")";
     }
+
+    // --- Filters ---
+    function populateFilters() {
+      var configs = [
+        { id: "filter-country", key: "countries", label: "country" },
+        { id: "filter-decade", key: "decades", label: "decade" },
+        { id: "filter-label", key: "labels", label: "label" },
+        { id: "filter-mood", key: "moods", label: "mood" },
+        { id: "filter-vocalist", key: "vocalists", label: "vocalist" },
+      ];
+
+      configs.forEach(function(cfg) {
+        var el = document.getElementById(cfg.id);
+        var items = facets[cfg.key];
+        if (!items) return;
+        // Sort by number of associated genres (descending)
+        var sorted = Object.keys(items).sort(function(a, b) {
+          return (items[b] || []).length - (items[a] || []).length;
+        });
+        sorted.forEach(function(val) {
+          var opt = document.createElement("option");
+          opt.value = val;
+          opt.textContent = val + " (" + (items[val] || []).length + ")";
+          el.appendChild(opt);
+        });
+      });
+    }
+
+    function applyFilter(category, value) {
+      // Reset all selects except the active one
+      var selects = document.querySelectorAll(".filter-select");
+      selects.forEach(function(sel) {
+        if (sel.id !== "filter-" + category) {
+          sel.value = "";
+          sel.classList.remove("active");
+        }
+      });
+
+      if (!value) {
+        activeFilter = null;
+        filterHighlight = new Set();
+        document.querySelectorAll(".filter-select").forEach(function(s) { s.classList.remove("active"); });
+        requestDraw();
+        return;
+      }
+
+      var catMap = {
+        country: "countries",
+        decade: "decades",
+        label: "labels",
+        mood: "moods",
+        vocalist: "vocalists",
+      };
+
+      var facetKey = catMap[category];
+      var genres = facets[facetKey] && facets[facetKey][value] ? facets[facetKey][value] : [];
+      activeFilter = { category: category, value: value, genreSet: new Set(genres) };
+      filterHighlight = activeFilter.genreSet;
+
+      document.getElementById("filter-" + category).classList.add("active");
+      requestDraw();
+    }
+
+    // Wire up filter selects
+    ["country", "decade", "label", "mood", "vocalist"].forEach(function(cat) {
+      document.getElementById("filter-" + cat).addEventListener("change", function() {
+        applyFilter(cat, this.value);
+      });
+    });
 
     // --- Init ---
     resize();
