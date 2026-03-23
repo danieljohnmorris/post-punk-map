@@ -54,16 +54,18 @@ const BLOCKED_TAGS = new Set([
   "thailand", "india", "israel", "south africa", "new-zealand",
   "buenos-aires", "aotearoa", "scandinave", "scandinavie",
   "français", "latin", "latin pop",
+  "america", "england", "europe", "asia", "africa",
+  "bulgarian", "connecticut", "buffalo", "cleveland", "detroit",
+  "columbus", "chicago", "albuquerque", "birmingham",
+  "bristol", "canterbury",
   // Labels (common ones that sneak in)
   "Ipecac Recordings", "Relapse Records", "Nuclear Blast", "Metal Blade Records",
   "Century Media Records", "Earache Records", "Roadrunner Records",
   "Epitaph Records", "Fat Wreck Chords", "Dischord Records",
   "Sub Pop", "Matador Records", "4AD", "Rough Trade", "Warp Records",
   "warp",
-  // Too generic single words
-  "rock", "pop", "metal", "jazz", "blues", "folk", "soul", "funk",
-  "country", "classical", "reggae", "hip-hop", "hip hop", "rap",
-  "r&b", "rnb", "gospel", "opera",
+  // Too generic single words (NOT genres)
+  "gospel", "opera",
   // Instruments/tech
   "guitar", "piano", "synth", "synthesizer", "drum machine", "bass",
   "vocalist", "singer-songwriter",
