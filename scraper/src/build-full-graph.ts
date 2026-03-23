@@ -397,7 +397,7 @@ function topEntries(map: Record<string, Set<string>>, limit: number): Record<str
     Object.entries(map)
       .sort((a, b) => b[1].size - a[1].size)
       .slice(0, limit)
-      .map(([k, v]) => [k, [...v].slice(0, 50)])
+      .map(([k, v]) => [k, [...v]])
   );
 }
 
