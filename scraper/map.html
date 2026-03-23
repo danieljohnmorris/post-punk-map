@@ -13,11 +13,14 @@
       overflow: hidden;
       height: 100vh;
       width: 100vw;
+      touch-action: none;
+      -webkit-overflow-scrolling: none;
     }
 
     canvas {
       display: block;
       cursor: grab;
+      touch-action: none;
     }
     canvas:active { cursor: grabbing; }
 
@@ -238,6 +241,11 @@
       requestDraw();
     }
     window.addEventListener("resize", resize);
+
+    // Prevent all default touch/gesture behavior on the page
+    document.addEventListener("gesturestart", function(e) { e.preventDefault(); }, { passive: false });
+    document.addEventListener("gesturechange", function(e) { e.preventDefault(); }, { passive: false });
+    document.addEventListener("gestureend", function(e) { e.preventDefault(); }, { passive: false });
 
     // --- Data Loading ---
     async function loadData() {
