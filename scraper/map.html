@@ -101,124 +101,44 @@
     }
     #info .row { margin-bottom: 2px; }
 
+
     #band-panel {
       position: fixed;
-      top: 70px;
-      right: 16px;
-      z-index: 20;
-      background: rgba(10,10,10,0.95);
-      backdrop-filter: blur(12px);
-      border: 1px solid #333;
-      border-radius: 4px;
-      width: 300px;
-      max-height: calc(100vh - 100px);
-      overflow-y: auto;
-      display: none;
-      padding: 0;
-    }
-    #band-panel-header {
-      position: sticky;
-      top: 0;
-      background: rgba(10,10,10,0.98);
-      padding: 12px 16px;
-      border-bottom: 1px solid #222;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    #band-panel-header .tag-name {
-      font-weight: 700;
-      font-size: 16px;
-      color: #f05;
-    }
-    #band-panel-header .close-btn {
-      background: none;
-      border: none;
-      color: #555;
-      font-size: 20px;
-      cursor: pointer;
-      padding: 0 4px;
-    }
-    #band-panel-header .close-btn:hover { color: #fff; }
-    #band-list {
-      padding: 8px 16px 16px;
-    }
-
-    #filter-bar {
-      position: fixed;
       top: 60px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 25;
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      justify-content: center;
-      width: min(700px, 95vw);
-    }
-
-    .filter-btn {
-      position: relative;
+      right: 0;
+      z-index: 20;
       background: rgba(10,10,10,0.92);
       backdrop-filter: blur(12px);
-      border: 1px solid #333;
-      color: #666;
-      font-family: Helvetica, Arial, sans-serif;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      padding: 6px 12px;
-      border-radius: 3px;
-      cursor: pointer;
-    }
-    .filter-btn:hover { border-color: #555; color: #ccc; }
-    .filter-btn.active { border-color: #f05; color: #f05; }
-    .filter-btn.open { border-color: #666; color: #ccc; }
-
-    .filter-dropdown {
-      display: none;
-      position: absolute;
-      top: 100%;
-      left: 0;
-      margin-top: 4px;
-      background: rgba(15,15,15,0.97);
-      backdrop-filter: blur(12px);
-      border: 1px solid #333;
-      border-radius: 4px;
-      max-height: 300px;
+      border-left: 1px solid #222;
+      width: 260px;
+      height: calc(100vh - 60px);
       overflow-y: auto;
-      min-width: 180px;
-      z-index: 30;
+      display: none;
+      padding: 16px 20px;
+      transform: translateX(0);
     }
-    .filter-dropdown.show { display: block; }
-    .filter-dropdown .filter-option {
-      padding: 6px 12px;
-      color: #888;
-      font-size: 12px;
-      cursor: pointer;
-      white-space: nowrap;
+    #band-panel .tag-name {
+      font-weight: 700;
+      font-size: 18px;
+      color: #f05;
+      display: block;
+      margin-bottom: 4px;
     }
-    .filter-dropdown .filter-option:hover { background: #1a1a1a; color: #fff; }
-    .filter-dropdown .filter-option.selected { color: #f05; }
-    .filter-dropdown .filter-search {
-      padding: 6px 12px;
-      border-bottom: 1px solid #222;
-      position: sticky;
-      top: 0;
-      background: rgba(15,15,15,0.98);
+    #band-panel .tag-count {
+      color: #444;
+      font-size: 11px;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+      display: block;
     }
-    .filter-dropdown .filter-search input {
-      width: 100%;
-      background: #111;
-      border: 1px solid #333;
-      color: #fff;
-      font-size: 12px;
-      padding: 4px 8px;
-      outline: none;
-      border-radius: 2px;
-      font-family: Helvetica, Arial, sans-serif;
+    #band-panel .band {
+      color: #777;
+      font-size: 13px;
+      padding: 2px 0;
+      cursor: default;
+      transition: color 0.1s;
     }
+    #band-panel .band:hover { color: #0af; }
 
     @keyframes pulse {
       0%, 100% { opacity: 0.3; }
@@ -261,19 +181,18 @@
     <div id="search-count">0 tags</div>
   </div>
 
+  <div id="band-panel">
+    <span class="tag-name"></span>
+    <span class="tag-count"></span>
+    <div id="band-list"></div>
+  </div>
+
   <div id="tooltip">
     <div class="tt-name"></div>
     <div class="tt-count"></div>
     <div class="tt-bands"></div>
   </div>
 
-  <div id="band-panel">
-    <div id="band-panel-header">
-      <span class="tag-name"></span>
-      <button class="close-btn">&times;</button>
-    </div>
-    <div id="band-list"></div>
-  </div>
 
   <div id="info">
     <div class="row" id="info-tags"></div>
@@ -287,9 +206,7 @@
     let nodes = [];
     let links = [];
     let bandsByTag = {};
-    let facets = {};        // { countries, decades, labels, moods, vocalists }
-    let activeFilter = null; // { category: "country", value: "british", genreSet: Set }
-    let filterHighlight = new Set(); // genre tag ids to highlight
+    let facets = {};
 
     // Camera
     let camX = 0, camY = 0, camZoom = 0.5;
@@ -299,7 +216,7 @@
     let hoveredNode = null;
     let selectedTag = null;
     let selectedNeighbors = new Set(); // tag ids connected to selectedTag
-    let selectedLinkSet = new Set();   // "src|tgt" strings for highlighted links
+    let selectedLinkSet = new Set();
     let searchQuery = "";
     let searchMatches = new Set();
 
@@ -389,7 +306,6 @@
 
     function isNodeVisible(node) {
       if (searchQuery && searchMatches.has(node.id)) return true;
-      if (activeFilter && filterHighlight.has(node.id)) return true;
       return node.tier <= visibleTier();
     }
 
@@ -433,8 +349,7 @@
           const s1 = worldToScreen(ns.x, ns.y);
           const s2 = worldToScreen(nt.x, nt.y);
           const isHighlighted = selectedTag && selectedLinkSet.has(l.src + "|" + l.tgt);
-          var bothFilterMatch = activeFilter && filterHighlight.has(nodes[l.src].id) && filterHighlight.has(nodes[l.tgt].id);
-          if ((selectedTag && !isHighlighted) || (activeFilter && !bothFilterMatch && !isHighlighted)) {
+          if (selectedTag && !isHighlighted) {
             // Dim non-related links when a tag is selected
             ctx.strokeStyle = "rgba(255,255,255,0.015)";
             ctx.lineWidth = Math.max(0.2, 0.3 * camZoom);
@@ -472,16 +387,13 @@
         const isSelected = node.id === selectedTag;
         const isNeighbor = selectedTag && selectedNeighbors.has(node.id);
         const isSearchMatch = searchQuery && searchMatches.has(node.id);
-        const isFilterMatch = activeFilter && filterHighlight.has(node.id);
-        const isFilterDimmed = activeFilter && !isFilterMatch && !isSelected && !isNeighbor;
-        const isDimmed = (selectedTag && !isSelected && !isNeighbor) || isFilterDimmed;
+        const isDimmed = selectedTag && !isSelected && !isNeighbor;
 
         // Node dot
         var dotColor;
         if (isSelected) dotColor = "#fff";
         else if (isSearchMatch) dotColor = "#ff0";
         else if (isNeighbor) dotColor = "#ff6090";
-        else if (isFilterMatch) dotColor = "#0df";
         else if (isHovered) dotColor = "#ff4488";
         else if (isDimmed) dotColor = "rgba(255,0,85,0.12)";
         else {
@@ -516,7 +428,6 @@
           if (isSelected) labelColor = "#ffffff";
           else if (isSearchMatch) labelColor = "rgba(255,255,0,0.9)";
           else if (isNeighbor) labelColor = "rgba(255,96,144,0.9)";
-          else if (isFilterMatch) labelColor = "rgba(0,221,255,0.9)";
           else if (isHovered) labelColor = "rgba(255,68,136,0.95)";
           else if (isDimmed) labelColor = "rgba(255,0,85,0.1)";
           else {
@@ -531,6 +442,7 @@
           ctx.fillText(node.id, sx, sy + r + fs * 0.6);
         }
       }
+
     }
 
     // --- Mouse interaction ---
@@ -597,7 +509,7 @@
       if (!wasDrag) {
         var node = findNodeAtScreen(e.clientX, e.clientY);
         if (node) {
-          selectTag(node.id);
+          selectTag(node.id === selectedTag ? null : node.id);
         } else {
           selectTag(null);
         }
@@ -673,7 +585,7 @@
         if (screenDx < 15 && screenDy < 15) {
           // It was a tap
           var node = findNodeAtScreen(ct.clientX, ct.clientY);
-          if (node) selectTag(node.id);
+          if (node) selectTag(node.id === selectedTag ? null : node.id);
           else selectTag(null);
         }
         dragging = false;
@@ -713,24 +625,27 @@
       }
     }
 
-    // --- Band panel ---
+    // --- Band orbital ---
     function selectTag(tagId) {
       selectedTag = tagId;
       selectedNeighbors = new Set();
       selectedLinkSet = new Set();
-      var panel = document.getElementById("band-panel");
+      orbitalBands = [];
 
       if (!tagId) {
-        panel.style.display = "none";
+        document.getElementById("band-panel").style.display = "none";
         requestDraw();
         return;
       }
 
-      // Find the node index for selectedTag, keep only top 30 strongest connections
+      // Find the selected node
+      var selNode = null;
       var selIdx = -1;
       for (var i = 0; i < nodes.length; i++) {
-        if (nodes[i].id === tagId) { selIdx = i; break; }
+        if (nodes[i].id === tagId) { selNode = nodes[i]; selIdx = i; break; }
       }
+
+      // Compute neighbor tags
       if (selIdx >= 0) {
         var candidates = [];
         for (var i = 0; i < links.length; i++) {
@@ -746,33 +661,32 @@
         }
       }
 
-      var bands = bandsByTag[tagId] || [];
+      // Center on the selected tag
+      if (selNode) {
+        camX = selNode.x;
+        camY = selNode.y;
+        camZoom = Math.max(camZoom, 1.5);
+      }
+
+      // Populate band panel
+      var panel = document.getElementById("band-panel");
       panel.style.display = "block";
       panel.querySelector(".tag-name").textContent = tagId;
+      panel.querySelector(".tag-count").textContent = (selNode ? selNode.count.toLocaleString() : "") + " artists";
 
+      var bands = bandsByTag[tagId] || [];
       var list = document.getElementById("band-list");
       while (list.firstChild) list.removeChild(list.firstChild);
       for (var i = 0; i < bands.length; i++) {
         var div = document.createElement("div");
         div.className = "band";
-        div.style.cssText = "color:#888;font-size:14px;padding:3px 0;cursor:default";
-        div.addEventListener("mouseenter", function() { this.style.color = "#0af"; });
-        div.addEventListener("mouseleave", function() { this.style.color = "#888"; });
-
-        var rank = document.createElement("span");
-        rank.style.cssText = "color:#333;font-size:11px;margin-right:6px;font-variant-numeric:tabular-nums";
-        rank.textContent = (i + 1).toString();
-        div.appendChild(rank);
-        div.appendChild(document.createTextNode(bands[i]));
+        div.textContent = bands[i];
         list.appendChild(div);
       }
 
+      updateZoomInfo();
       requestDraw();
     }
-
-    document.querySelector("#band-panel-header .close-btn").addEventListener("click", function() {
-      selectTag(null);
-    });
 
     // --- Search ---
     var searchInput = document.getElementById("search");
@@ -838,124 +752,8 @@
         "zoom: " + camZoom.toFixed(2) + "x | showing: " + visible + " tags (tier 0-" + vt + ")";
     }
 
-    // --- Filters ---
-    var openDropdown = null;
-
-    var FACET_MAP = {
-      country: "countries",
-      decade: "decades",
-      label: "labels",
-      mood: "moods",
-      vocalist: "vocalists",
-    };
-
     function populateFilters() {
-      Object.keys(FACET_MAP).forEach(function(cat) {
-        var dd = document.getElementById("dd-" + cat);
-        var items = facets[FACET_MAP[cat]];
-        if (!items) return;
-
-        // Add search for long lists
-        if (Object.keys(items).length > 15) {
-          var searchDiv = document.createElement("div");
-          searchDiv.className = "filter-search";
-          var searchInput = document.createElement("input");
-          searchInput.placeholder = "search...";
-          searchInput.addEventListener("input", function() {
-            var q = this.value.toLowerCase();
-            dd.querySelectorAll(".filter-option").forEach(function(opt) {
-              opt.style.display = opt.dataset.value.includes(q) ? "" : "none";
-            });
-          });
-          searchInput.addEventListener("click", function(e) { e.stopPropagation(); });
-          searchDiv.appendChild(searchInput);
-          dd.appendChild(searchDiv);
-        }
-
-        var sorted = Object.keys(items).sort(function(a, b) {
-          return (items[b] || []).length - (items[a] || []).length;
-        });
-
-        sorted.forEach(function(val) {
-          var div = document.createElement("div");
-          div.className = "filter-option";
-          div.dataset.value = val;
-          div.textContent = val + " (" + (items[val] || []).length + ")";
-          div.addEventListener("click", function(e) {
-            e.stopPropagation();
-            applyFilter(cat, val);
-            closeAllDropdowns();
-          });
-          dd.appendChild(div);
-        });
-      });
-    }
-
-    function closeAllDropdowns() {
-      document.querySelectorAll(".filter-dropdown").forEach(function(d) { d.classList.remove("show"); });
-      document.querySelectorAll(".filter-btn").forEach(function(b) { b.classList.remove("open"); });
-      openDropdown = null;
-    }
-
-    // Toggle dropdown on button click
-    document.querySelectorAll(".filter-btn").forEach(function(btn) {
-      btn.addEventListener("click", function(e) {
-        e.stopPropagation();
-        var cat = btn.dataset.filter;
-        var dd = document.getElementById("dd-" + cat);
-        if (dd.classList.contains("show")) {
-          closeAllDropdowns();
-          return;
-        }
-        closeAllDropdowns();
-        dd.classList.add("show");
-        btn.classList.add("open");
-        openDropdown = cat;
-        // Focus search if present
-        var si = dd.querySelector("input");
-        if (si) si.focus();
-      });
-    });
-
-    // Close on outside click
-    document.addEventListener("click", function() { closeAllDropdowns(); });
-
-    function applyFilter(category, value) {
-      // Toggle off if same value
-      if (activeFilter && activeFilter.category === category && activeFilter.value === value) {
-        activeFilter = null;
-        filterHighlight = new Set();
-        document.querySelectorAll(".filter-btn").forEach(function(b) {
-          b.classList.remove("active");
-          var textNode = b.firstChild;
-          if (textNode && textNode.nodeType === 3) textNode.textContent = b.dataset.filter;
-        });
-        requestDraw();
-        return;
-      }
-
-      var facetKey = FACET_MAP[category];
-      var genres = facets[facetKey] && facets[facetKey][value] ? facets[facetKey][value] : [];
-      activeFilter = { category: category, value: value, genreSet: new Set(genres) };
-      filterHighlight = activeFilter.genreSet;
-
-      // Update button states and labels
-      document.querySelectorAll(".filter-btn").forEach(function(b) {
-        var cat = b.dataset.filter;
-        var dd = document.getElementById("dd-" + cat);
-        // Reset text node (first child) without destroying dropdown
-        var textNode = b.firstChild;
-        if (textNode && textNode.nodeType === 3) {
-          textNode.textContent = cat === category ? value : cat;
-        }
-        if (cat === category) {
-          b.classList.add("active");
-        } else {
-          b.classList.remove("active");
-        }
-      });
-
-      requestDraw();
+      // No-op for now — filters removed from UI
     }
 
 
