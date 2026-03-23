@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Raw scraper data (too large for git)
+data/bandcamp/
+data/discogs/
+data/enriched/
+data/lastfm/
+data/metalarchives/
+data/musicbrainz/
+data/web/
+data/wikipedia/
+data/graph-100.json
+data/graph-300.json

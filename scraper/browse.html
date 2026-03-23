@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Music Scraper Browser</title>
+  <script src="https://unpkg.com/force-graph@1.51.2/dist/force-graph.min.js"></script>
+  <script src="https://unpkg.com/3d-force-graph@1.79.1/dist/3d-force-graph.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0a;
+      color: #e0e0e0;
+      font-family: Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 10;
+      background: #0a0a0a;
+      border-bottom: 1px solid #222;
+      padding: 16px 32px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+    }
+
+    .tab-divider {
+      width: 1px;
+      height: 28px;
+      background: #333;
+      margin: 0 8px;
+      align-self: center;
+    }
+
+    .tab {
+      background: none;
+      border: 1px solid #333;
+      color: #888;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      padding: 8px 20px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .tab:hover { color: #ccc; border-color: #555; }
+    .tab.active { color: #fff; border-color: #fff; background: #1a1a1a; }
+
+    input {
+      flex: 1;
+      background: #111;
+      border: 1px solid #333;
+      color: #fff;
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      padding: 8px 16px;
+      outline: none;
+      caret-color: #fff;
+    }
+
+    input::placeholder { color: #444; }
+    input:focus { border-color: #666; }
+
+    .stats {
+      color: #555;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      white-space: nowrap;
+    }
+
+    #content {
+      margin-top: 68px;
+      height: calc(100vh - 68px);
+      overflow: auto;
+    }
+
+    #list-view {
+      padding: 32px;
+    }
+
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+    }
+
+    .item {
+      font-size: 32px;
+      font-weight: 700;
+      padding: 6px 16px;
+      cursor: default;
+      transition: color 0.1s;
+      line-height: 1.2;
+    }
+
+    .item:hover { color: #fff; }
+
+    .tag-item { color: #666; }
+    .tag-item:hover { color: #f05; }
+
+    .band-item { color: #555; }
+    .band-item:hover { color: #0af; }
+
+    #graph-view {
+      display: none;
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    #graph-container {
+      width: 100%;
+      height: 100%;
+    }
+
+    #graph-tooltip {
+      position: fixed;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      color: #fff;
+      font-size: 13px;
+      padding: 8px 14px;
+      border-radius: 4px;
+      pointer-events: none;
+      display: none;
+      z-index: 20;
+      max-width: 400px;
+    }
+
+    #graph-tooltip .tt-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+    #graph-tooltip .tt-type { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+    #graph-tooltip .tt-detail { color: #aaa; margin-top: 4px; }
+
+    #graph-legend {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(10,10,10,0.9);
+      border: 1px solid #333;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: #888;
+      border-radius: 4px;
+    }
+
+    #graph-legend .legend-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    #graph-legend .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+    #graph-info {
+      position: absolute;
+      top: 12px;
+      right: 20px;
+      color: #555;
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+
+    @keyframes pulse {
+      0%, 100% { color: #552030; }
+      40%, 60% { color: #ff0055; }
+    }
+
+    @media (max-width: 768px) {
+      .item { font-size: 22px; }
+      input { font-size: 18px; }
+      header { padding: 12px; }
+      #list-view { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="tabs" id="data-tabs">
+      <button class="tab active" data-view="tags">Tags</button>
+      <button class="tab" data-view="bands">Bands</button>
+    </div>
+    <div class="tab-divider"></div>
+    <div class="tabs" id="mode-tabs">
+      <button class="tab active" data-mode="list">List</button>
+      <button class="tab" data-mode="graph">Graph</button>
+      <button class="tab" data-mode="graph3d">3D</button>
+    </div>
+    <input type="text" id="filter" placeholder="filter..." autofocus>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <div id="loading" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Helvetica,Arial,sans-serif">
+    <div style="font-size:32px;font-weight:700;letter-spacing:2px" id="loading-title"><span style="animation:pulse 1.4s ease-in-out infinite;animation-delay:0s">L</span><span style="animation:pulse 1.4s ease-in-out infinite;animation-delay:0.1s">O</span><span style="animation:pulse 1.4s ease-in-out infinite;animation-delay:0.2s">A</span><span style="animation:pulse 1.4s ease-in-out infinite;animation-delay:0.3s">D</span><span style="animation:pulse 1.4s ease-in-out infinite;animation-delay:0.4s">I</span><span style="animation:pulse 1.4s ease-in-out infinite;animation-delay:0.5s">N</span><span style="animation:pulse 1.4s ease-in-out infinite;animation-delay:0.6s">G</span></div>
+    <div style="color:#555;font-size:14px;margin-top:12px;letter-spacing:1px" id="loading-status">connecting...</div>
+    <div style="color:#333;font-size:12px;margin-top:8px" id="loading-count">0 artists</div>
+  </div>
+
+  <div id="content">
+    <div id="list-view">
+      <div class="grid" id="grid"></div>
+    </div>
+    <div id="graph-view">
+      <div id="graph-container"></div>
+      <div id="graph-legend">
+        <div class="legend-row"><div class="legend-dot" style="background:#f05"></div> Tag</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#0af"></div> Band</div>
+        <div class="legend-row" style="margin-top:8px;color:#555">Zoom in to reveal bands. Click tag to expand. Click background to reset.</div>
+      </div>
+      <div id="graph-info"></div>
+    </div>
+  </div>
+
+  <div id="graph-tooltip">
+    <div class="tt-type"></div>
+    <div class="tt-name"></div>
+    <div class="tt-detail"></div>
+  </div>
+
+  <script>
+    // --- URL Params ---
+    function readParams() {
+      const p = new URLSearchParams(location.search);
+      return {
+        view: p.get("view") || "tags",
+        mode: p.get("mode") || "list",
+        filter: p.get("q") || "",
+        tag: p.get("tag") || null,
+      };
+    }
+
+    function pushParams() {
+      const p = new URLSearchParams();
+      if (dataView !== "tags") p.set("view", dataView);
+      if (mode !== "list") p.set("mode", mode);
+      const q = document.getElementById("filter").value.trim();
+      if (q) p.set("q", q);
+      if (expandedTag) p.set("tag", expandedTag);
+      const str = p.toString();
+      const url = location.pathname + (str ? "?" + str : "");
+      history.replaceState(null, "", url);
+    }
+
+    // --- State ---
+    const params = readParams();
+    let artists = [];
+    let tags = {};
+    let dataView = params.view;
+    let mode = params.mode;
+    let graphInstance = null;
+    let graph3dInstance = null;
+    let graphData = null;
+    let expandedTag = params.tag;
+
+    const seen = new Map();
+
+    // --- Data Loading (pre-built graph) ---
+    let prebuiltGraph = null;
+    let prebuiltBandsByTag = {};
+
+    async function loadData() {
+      const loadStatus = document.getElementById("loading-status");
+      const loadCount = document.getElementById("loading-count");
+
+      // Load pre-built graph (small file, fast)
+      if (loadStatus) loadStatus.textContent = "loading graph...";
+      try {
+        const res = await fetch("../data/graph-300.json");
+        const data = await res.json();
+        prebuiltGraph = data;
+        prebuiltBandsByTag = data.bandsByTag || {};
+
+        // Build artists/tags from graph nodes for list view
+        const tagNodesArr = data.nodes.filter(n => n.type === "tag");
+        const bandNodesArr = data.nodes.filter(n => n.type === "band");
+
+        for (const n of tagNodesArr) {
+          tags[n.name] = n.count;
+        }
+        for (const n of bandNodesArr) {
+          artists.push({ artist: n.name, tags: [] });
+        }
+        // Add bands from bandsByTag for richer list
+        for (const [tag, bands] of Object.entries(prebuiltBandsByTag)) {
+          for (const name of bands) {
+            const key = name.toLowerCase().trim();
+            if (!seen.has(key)) {
+              seen.set(key, { artist: name, tags: [tag] });
+              artists.push({ artist: name, tags: [tag] });
+            } else {
+              const existing = seen.get(key);
+              if (!existing.tags.includes(tag)) existing.tags.push(tag);
+            }
+          }
+        }
+
+        if (loadCount) loadCount.textContent = data.stats.totalArtists.toLocaleString() + " artists indexed";
+      } catch(e) {
+        console.error("Failed to load graph:", e);
+      }
+
+      const loading = document.getElementById("loading");
+      if (loading) loading.style.display = "none";
+      setMode(mode);
+    }
+
+    function buildTagIndex() {
+      tags = {};
+      for (const a of artists) {
+        for (const t of a.tags || []) {
+          tags[t] = (tags[t] || 0) + 1;
+        }
+      }
+    }
+
+    // --- List Rendering ---
+    function renderList() {
+      const q = document.getElementById("filter").value.toLowerCase().trim();
+      const grid = document.getElementById("grid");
+      const stats = document.getElementById("stats");
+      while (grid.firstChild) grid.removeChild(grid.firstChild);
+
+      if (dataView === "tags") {
+        const sorted = Object.entries(tags).sort((a, b) => b[1] - a[1]);
+        let matchCount = 0;
+        sorted.forEach(([tag]) => {
+          if (q && !tag.includes(q)) return;
+          matchCount++;
+          const el = document.createElement("span");
+          el.className = "item tag-item";
+          el.textContent = tag;
+          grid.appendChild(el);
+        });
+        stats.textContent = q
+          ? matchCount + " / " + sorted.length + " tags"
+          : sorted.length + " tags";
+      } else {
+        const sorted = [...artists].sort((a, b) => a.artist.localeCompare(b.artist));
+        let matchCount = 0;
+        sorted.forEach((a) => {
+          const name = a.artist;
+          const matchesName = name.toLowerCase().includes(q);
+          const matchesTags = (a.tags || []).some((t) => t.includes(q));
+          const matchesLoc = (a.location || "").toLowerCase().includes(q);
+          if (q && !matchesName && !matchesTags && !matchesLoc) return;
+          matchCount++;
+          const el = document.createElement("span");
+          el.className = "item band-item";
+          el.textContent = name;
+          grid.appendChild(el);
+        });
+        stats.textContent = q
+          ? matchCount + " / " + sorted.length + " bands"
+          : sorted.length + " bands";
+      }
+    }
+
+    // --- Graph Building ---
+    // Pre-computed data for semantic zoom
+    let tagNodes = [];
+    let tagLinks = [];
+    let tagSet = new Set();
+    let bandsByTag = new Map(); // tag -> sorted bands array
+
+    function precomputeGraph(filterQ) {
+      if (!prebuiltGraph) return;
+
+      const allNodes = prebuiltGraph.nodes;
+      const allLinks = prebuiltGraph.links;
+
+      // Tag-only nodes
+      tagNodes = allNodes
+        .filter(n => n.type === "tag")
+        .filter(n => !filterQ || n.name.includes(filterQ))
+        .map(n => ({ ...n }));
+
+      tagSet = new Set(tagNodes.map(n => n.name));
+
+      // Tag-only links
+      tagLinks = allLinks
+        .filter(l => {
+          const src = typeof l.source === "string" ? l.source : l.source.id || l.source;
+          const tgt = typeof l.target === "string" ? l.target : l.target.id || l.target;
+          return src.startsWith("tag:") && tgt.startsWith("tag:");
+        })
+        .filter(l => {
+          const srcName = (typeof l.source === "string" ? l.source : l.source.id).replace("tag:", "");
+          const tgtName = (typeof l.target === "string" ? l.target : l.target.id).replace("tag:", "");
+          return tagSet.has(srcName) && tagSet.has(tgtName);
+        })
+        .map(l => ({ ...l }));
+
+      // Bands per tag from prebuilt
+      bandsByTag = new Map();
+      for (const [tag, bands] of Object.entries(prebuiltBandsByTag)) {
+        if (tagSet.has(tag)) {
+          bandsByTag.set(tag, bands.map(name => ({ artist: { artist: name, tags: [tag] }, score: 1 })));
+        }
+      }
+    }
+
+    function buildTagOnlyGraph() {
+      return {
+        nodes: tagNodes.map(n => ({ ...n })),
+        links: tagLinks.map(l => ({ ...l })),
+      };
+    }
+
+    function buildExpandedTagGraph(tagName) {
+      const MAX_BANDS = 60;
+      const bandNames = (prebuiltBandsByTag[tagName] || []).slice(0, MAX_BANDS);
+
+      const nodes = [{ id: "tag:" + tagName, name: tagName, type: "tag", count: tags[tagName] || 0, val: 1.5 }];
+      const nodeIds = new Set(["tag:" + tagName]);
+      const links = [];
+
+      for (const name of bandNames) {
+        const id = "band:" + name;
+        nodes.push({ id, name, type: "band", count: 1, val: 0.4 });
+        nodeIds.add(id);
+        links.push({ source: "tag:" + tagName, target: id, weight: 3 });
+      }
+
+      return { nodes, links };
+    }
+
+    // --- Graph Rendering ---
+    function destroyGraphs() {
+      if (graphInstance) { graphInstance._destructor(); graphInstance = null; }
+      if (graph3dInstance) { graph3dInstance._destructor(); graph3dInstance = null; }
+      const container = document.getElementById("graph-container");
+      while (container.firstChild) container.removeChild(container.firstChild);
+    }
+
+    function renderGraph() {
+      const container = document.getElementById("graph-container");
+      const stats = document.getElementById("stats");
+      const info = document.getElementById("graph-info");
+      const q = document.getElementById("filter").value.toLowerCase().trim();
+
+      destroyGraphs();
+
+      // Ensure container has dimensions
+      if (!container.clientWidth || !container.clientHeight) {
+        requestAnimationFrame(() => renderGraph());
+        return;
+      }
+
+      // Precompute if needed
+      precomputeGraph(q);
+
+      if (expandedTag) {
+        graphData = buildExpandedTagGraph(expandedTag);
+        info.textContent = "TAG: " + expandedTag + " (" + graphData.nodes.filter(n => n.type === "band").length + " bands)";
+      } else {
+        graphData = buildTagOnlyGraph();
+        info.textContent = graphData.nodes.length + " tags — click a tag or zoom in to see bands";
+      }
+
+      stats.textContent = graphData.nodes.length + " nodes, " + graphData.links.length + " edges";
+
+      const maxWeight = Math.max(1, ...graphData.links.map(l => l.weight));
+      maxGraphWeight = maxWeight;
+
+      if (mode === "graph3d") {
+        renderGraph3D(container, maxWeight);
+      } else {
+        renderGraph2D(container, maxWeight);
+      }
+    }
+
+    let currentZoom = 1;
+    let bandsAdded = false;
+
+    function addBandsToGraph() {
+      if (bandsAdded || !graphInstance || expandedTag) return;
+      bandsAdded = true;
+
+      const data = graphInstance.graphData();
+      const nodeIds = new Set(data.nodes.map(n => n.id));
+      const newNodes = [...data.nodes];
+      const newLinks = [...data.links];
+
+      // For each visible tag, add top bands
+      const BANDS_PER_TAG = 8;
+      for (const node of data.nodes) {
+        if (node.type !== "tag") continue;
+        const tagName = node.name;
+        const bands = (bandsByTag.get(tagName) || []).slice(0, BANDS_PER_TAG);
+        for (const { artist: band } of bands) {
+          const id = "band:" + band.artist;
+          if (!nodeIds.has(id)) {
+            newNodes.push({ id, name: band.artist, type: "band", val: 0.3 });
+            nodeIds.add(id);
+          }
+          newLinks.push({ source: "tag:" + tagName, target: id, weight: 1 });
+        }
+      }
+
+      graphInstance.graphData({ nodes: newNodes, links: newLinks });
+
+      const info = document.getElementById("graph-info");
+      const tagCount = newNodes.filter(n => n.type === "tag").length;
+      const bandCount = newNodes.filter(n => n.type === "band").length;
+      info.textContent = tagCount + " tags, " + bandCount + " bands";
+
+      document.getElementById("stats").textContent = newNodes.length + " nodes, " + newLinks.length + " edges";
+    }
+
+    function removeBandsFromGraph() {
+      if (!bandsAdded || !graphInstance || expandedTag) return;
+      bandsAdded = false;
+
+      const data = graphInstance.graphData();
+      const tagOnly = data.nodes.filter(n => n.type === "tag");
+      const tagIds = new Set(tagOnly.map(n => n.id));
+      const tagLinksOnly = data.links.filter(l => {
+        const src = typeof l.source === "object" ? l.source.id : l.source;
+        const tgt = typeof l.target === "object" ? l.target.id : l.target;
+        return tagIds.has(src) && tagIds.has(tgt);
+      });
+
+      graphInstance.graphData({ nodes: tagOnly, links: tagLinksOnly });
+
+      const info = document.getElementById("graph-info");
+      info.textContent = tagOnly.length + " tags — zoom in to see bands";
+      document.getElementById("stats").textContent = tagOnly.length + " nodes, " + tagLinksOnly.length + " edges";
+    }
+
+    function renderGraph2D(container, maxWeight) {
+      bandsAdded = false;
+      const ZOOM_THRESHOLD = 2;
+
+      graphInstance = ForceGraph()(container)
+        .graphData(graphData)
+        .backgroundColor("#0a0a0a")
+        .width(container.clientWidth)
+        .height(container.clientHeight)
+        .nodeId("id")
+        .nodeVal("val")
+        .nodeLabel("")
+        .nodeColor(n => n.type === "tag" ? "#f05" : "#0af")
+        .nodeCanvasObjectMode(() => "after")
+        .nodeCanvasObject((node, ctx, globalScale) => {
+          // Hide band labels when zoomed out
+          if (node.type === "band" && globalScale < ZOOM_THRESHOLD) return;
+
+          const label = node.name;
+          const fontSize = node.type === "tag"
+            ? Math.min(14, Math.max(10, 14 / globalScale)) / globalScale
+            : Math.min(10, 10 / globalScale) / globalScale;
+          ctx.font = `bold ${fontSize}px Helvetica, Arial, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = node.type === "tag" ? "rgba(255,0,85,0.9)" : "rgba(0,170,255,0.85)";
+          ctx.fillText(label, node.x, node.y + (node.val || 1) * 2 + fontSize * 0.6);
+        })
+        .nodeVisibility(node => {
+          if (node.type === "tag") return true;
+          return bandsAdded;
+        })
+        .linkVisibility(l => {
+          if (!bandsAdded) {
+            const src = typeof l.source === "object" ? l.source : {};
+            const tgt = typeof l.target === "object" ? l.target : {};
+            return src.type === "tag" && tgt.type === "tag";
+          }
+          return true;
+        })
+        .linkColor(l => {
+          const alpha = 0.05 + 0.3 * (l.weight / maxWeight);
+          return `rgba(255,255,255,${alpha})`;
+        })
+        .linkWidth(l => 0.3 + 2 * (l.weight / maxWeight))
+        .onNodeHover(handleNodeHover)
+        .onNodeClick(handleNodeClick)
+        .onBackgroundClick(() => {
+          if (expandedTag) { expandedTag = null; pushParams(); renderGraph(); }
+        })
+        .onZoom(({ k }) => {
+          currentZoom = k;
+          if (k >= ZOOM_THRESHOLD && !bandsAdded && !expandedTag) {
+            addBandsToGraph();
+          } else if (k < ZOOM_THRESHOLD * 0.7 && bandsAdded && !expandedTag) {
+            removeBandsFromGraph();
+          }
+        })
+        .d3AlphaDecay(0.02)
+        .d3VelocityDecay(0.25)
+        .cooldownTime(5000)
+        .warmupTicks(50);
+
+      graphInstance.d3Force("charge").strength(-500).distanceMax(500);
+      graphInstance.d3Force("link").distance(150).strength(l => 0.1 * (l.weight / maxWeight));
+    }
+
+    function renderGraph3D(container, maxWeight) {
+      try {
+        console.log("3D: init", graphData.nodes.length, "nodes", container.clientWidth, "x", container.clientHeight);
+        graph3dInstance = ForceGraph3D()(container);
+        graph3dInstance
+          .backgroundColor("#0a0a0a")
+          .width(container.clientWidth)
+          .height(container.clientHeight)
+          .nodeId("id")
+          .nodeRelSize(6)
+          .nodeVal(n => n.type === "tag" ? 2 : 0.5)
+          .nodeColor(n => n.type === "tag" ? "#ff0055" : "#00aaff")
+          .nodeOpacity(0.9)
+          .nodeLabel(n => n.name + (n.type === "tag" ? " (" + (n.count || 0).toLocaleString() + ")" : ""))
+          .linkColor(l => {
+            const alpha = 0.03 + 0.25 * (l.weight / maxWeight);
+            return "rgba(255,255,255," + alpha + ")";
+          })
+          .linkWidth(l => 0.1 + 1 * (l.weight / maxWeight))
+          .linkOpacity(0.4)
+          .onNodeClick(handleNodeClick)
+          .onBackgroundClick(() => {
+            if (highlighted3dNode) {
+              highlighted3dNode = null;
+              graph3dInstance
+                .nodeColor(n => n.type === "tag" ? "#ff0055" : "#00aaff")
+                .nodeOpacity(0.9)
+                .linkColor(l => {
+                  const alpha = 0.03 + 0.25 * (l.weight / maxGraphWeight);
+                  return "rgba(255,255,255," + alpha + ")";
+                });
+              document.getElementById("graph-info").textContent = graphData.nodes.length + " tags";
+            }
+          })
+          .d3AlphaDecay(0.02)
+          .d3VelocityDecay(0.25)
+          .cooldownTime(5000)
+          .warmupTicks(50)
+          .graphData(graphData);
+
+        graph3dInstance.d3Force("charge").strength(-200);
+        graph3dInstance.d3Force("link").distance(l => {
+          if (l.weight > maxWeight * 0.5) return 40;
+          return 80;
+        });
+
+        // Zoom camera closer
+        graph3dInstance.cameraPosition({ z: 400 });
+
+        // Swap: left-click=pan, right-click=rotate
+        const controls = graph3dInstance.controls();
+        if (controls && controls.mouseButtons) {
+          const left = controls.mouseButtons.LEFT;
+          controls.mouseButtons.LEFT = controls.mouseButtons.RIGHT;
+          controls.mouseButtons.RIGHT = left;
+        }
+      } catch(e) {
+        console.error("3D render failed:", e);
+        const msg = document.createElement("div");
+        msg.style.cssText = "color:#f05;padding:40px;font-size:16px";
+        msg.textContent = "3D failed: " + e.message;
+        container.appendChild(msg);
+      }
+    }
+
+    function handleNodeHover(node, prevNode) {
+      const tooltip = document.getElementById("graph-tooltip");
+      const container = document.getElementById("graph-container");
+      container.style.cursor = node ? "pointer" : "default";
+
+      if (!node) {
+        tooltip.style.display = "none";
+        return;
+      }
+
+      tooltip.style.display = "block";
+      tooltip.querySelector(".tt-type").textContent = node.type;
+      tooltip.querySelector(".tt-name").textContent = node.name;
+
+      if (node.type === "tag") {
+        tooltip.querySelector(".tt-detail").textContent = (node.count || 0).toLocaleString() + " artists";
+      } else {
+        const a = artists.find(a => a.artist === node.name);
+        const t = a ? (a.tags || []).slice(0, 8).join(", ") : "";
+        tooltip.querySelector(".tt-detail").textContent = t;
+      }
+    }
+
+    // Track mouse for tooltip
+    document.addEventListener("mousemove", (e) => {
+      const tooltip = document.getElementById("graph-tooltip");
+      if (tooltip.style.display === "block") {
+        tooltip.style.left = (e.clientX + 14) + "px";
+        tooltip.style.top = (e.clientY - 10) + "px";
+      }
+    });
+
+    let highlighted3dNode = null;
+    let maxGraphWeight = 1;
+
+    function handleNodeClick(node) {
+      if (node.type === "tag") {
+        // In 3D, zoom to tag and highlight neighbors
+        if (mode === "graph3d" && graph3dInstance) {
+          highlighted3dNode = highlighted3dNode === node ? null : node;
+
+          // Highlight clicked + connected nodes
+          const connectedIds = new Set();
+          if (highlighted3dNode) {
+            connectedIds.add(node.id);
+            const data = graph3dInstance.graphData();
+            data.links.forEach(l => {
+              const src = typeof l.source === "object" ? l.source.id : l.source;
+              const tgt = typeof l.target === "object" ? l.target.id : l.target;
+              if (src === node.id) connectedIds.add(tgt);
+              if (tgt === node.id) connectedIds.add(src);
+            });
+          }
+
+          // Update node appearance — keep everything visible, just emphasize connected
+          graph3dInstance
+            .nodeColor(n => {
+              if (!highlighted3dNode) return n.type === "tag" ? "#ff0055" : "#00aaff";
+              if (n === highlighted3dNode) return "#ffffff";
+              if (connectedIds.has(n.id)) return "#ff6090";
+              return "#442233";
+            })
+            .nodeOpacity(0.9);
+
+          // Zoom to a comfortable distance
+          if (highlighted3dNode) {
+            const dist = 300;
+            graph3dInstance.cameraPosition(
+              { x: node.x, y: node.y + dist * 0.3, z: node.z + dist },
+              { x: node.x, y: node.y, z: node.z },
+              1500
+            );
+
+            // Show band names
+            const info = document.getElementById("graph-info");
+            const bandNames = (prebuiltBandsByTag[node.name] || []).slice(0, 15);
+            info.textContent = node.name + " — " + bandNames.join(", ");
+          } else {
+            document.getElementById("graph-info").textContent = graphData.nodes.length + " tags";
+          }
+          return;
+        }
+        expandedTag = expandedTag === node.name ? null : node.name;
+        pushParams();
+        renderGraph();
+      } else if (node.type === "band") {
+        const a = artists.find(a => a.artist === node.name);
+        if (a) console.log(node.name, a.tags);
+      }
+    }
+
+    // --- Mode/View Switching ---
+    function renderCurrent() {
+      if (mode === "list") {
+        renderList();
+      } else {
+        renderGraph();
+      }
+    }
+
+    function setMode(newMode) {
+      destroyGraphs();
+      mode = newMode;
+      const listView = document.getElementById("list-view");
+      const graphView = document.getElementById("graph-view");
+
+      if (mode === "list") {
+        listView.style.display = "block";
+        graphView.style.display = "none";
+        document.getElementById("content").style.overflow = "auto";
+        renderList();
+      } else {
+        listView.style.display = "none";
+        graphView.style.display = "block";
+        document.getElementById("content").style.overflow = "hidden";
+        expandedTag = null;
+        // Wait for layout before rendering so container has dimensions
+        requestAnimationFrame(() => renderGraph());
+      }
+    }
+
+    // Data tabs (tags/bands)
+    document.querySelectorAll("#data-tabs .tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll("#data-tabs .tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        dataView = tab.dataset.view;
+        expandedTag = null;
+        pushParams();
+        renderCurrent();
+      });
+    });
+
+    // Mode tabs (list/graph)
+    document.querySelectorAll("#mode-tabs .tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll("#mode-tabs .tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        setMode(tab.dataset.mode);
+        pushParams();
+      });
+    });
+
+    // Filter
+    let debounceTimer;
+    document.getElementById("filter").addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        expandedTag = null;
+        pushParams();
+        renderCurrent();
+      }, mode === "graph" || mode === "graph3d" ? 500 : 100);
+    });
+
+    // Resize
+    window.addEventListener("resize", () => {
+      const container = document.getElementById("graph-container");
+      if (graphInstance) graphInstance.width(container.clientWidth).height(container.clientHeight);
+      if (graph3dInstance) graph3dInstance.width(container.clientWidth).height(container.clientHeight);
+    });
+
+    // Init from URL params
+    document.getElementById("filter").value = params.filter;
+    // Set active tabs from params
+    document.querySelectorAll("#data-tabs .tab").forEach(t => {
+      t.classList.toggle("active", t.dataset.view === dataView);
+    });
+    document.querySelectorAll("#mode-tabs .tab").forEach(t => {
+      t.classList.toggle("active", t.dataset.mode === mode);
+    });
+
+    // Load data — page becomes usable after first few small sources
+    loadData();
+  </script>
+</body>
+</html>
