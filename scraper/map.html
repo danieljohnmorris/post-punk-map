@@ -149,7 +149,7 @@
       top: 60px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 20;
+      z-index: 25;
       display: flex;
       gap: 6px;
       flex-wrap: wrap;
@@ -157,26 +157,68 @@
       width: min(700px, 95vw);
     }
 
-    .filter-select {
+    .filter-btn {
+      position: relative;
       background: rgba(10,10,10,0.92);
       backdrop-filter: blur(12px);
       border: 1px solid #333;
-      color: #888;
+      color: #666;
       font-family: Helvetica, Arial, sans-serif;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       letter-spacing: 1px;
       text-transform: uppercase;
-      padding: 6px 10px;
+      padding: 6px 12px;
       border-radius: 3px;
       cursor: pointer;
-      outline: none;
-      -webkit-appearance: none;
-      appearance: none;
     }
-    .filter-select:hover { border-color: #555; color: #ccc; }
-    .filter-select.active { border-color: #f05; color: #f05; }
-    .filter-select option { background: #111; color: #ccc; }
+    .filter-btn:hover { border-color: #555; color: #ccc; }
+    .filter-btn.active { border-color: #f05; color: #f05; }
+    .filter-btn.open { border-color: #666; color: #ccc; }
+
+    .filter-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
+      background: rgba(15,15,15,0.97);
+      backdrop-filter: blur(12px);
+      border: 1px solid #333;
+      border-radius: 4px;
+      max-height: 300px;
+      overflow-y: auto;
+      min-width: 180px;
+      z-index: 30;
+    }
+    .filter-dropdown.show { display: block; }
+    .filter-dropdown .filter-option {
+      padding: 6px 12px;
+      color: #888;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .filter-dropdown .filter-option:hover { background: #1a1a1a; color: #fff; }
+    .filter-dropdown .filter-option.selected { color: #f05; }
+    .filter-dropdown .filter-search {
+      padding: 6px 12px;
+      border-bottom: 1px solid #222;
+      position: sticky;
+      top: 0;
+      background: rgba(15,15,15,0.98);
+    }
+    .filter-dropdown .filter-search input {
+      width: 100%;
+      background: #111;
+      border: 1px solid #333;
+      color: #fff;
+      font-size: 12px;
+      padding: 4px 8px;
+      outline: none;
+      border-radius: 2px;
+      font-family: Helvetica, Arial, sans-serif;
+    }
 
     @keyframes pulse {
       0%, 100% { opacity: 0.3; }
@@ -220,11 +262,11 @@
   </div>
 
   <div id="filter-bar">
-    <select class="filter-select" id="filter-country"><option value="">country</option></select>
-    <select class="filter-select" id="filter-decade"><option value="">decade</option></select>
-    <select class="filter-select" id="filter-label"><option value="">label</option></select>
-    <select class="filter-select" id="filter-mood"><option value="">mood</option></select>
-    <select class="filter-select" id="filter-vocalist"><option value="">vocalist</option></select>
+    <div class="filter-btn" data-filter="country">country<div class="filter-dropdown" id="dd-country"></div></div>
+    <div class="filter-btn" data-filter="decade">decade<div class="filter-dropdown" id="dd-decade"></div></div>
+    <div class="filter-btn" data-filter="label">label<div class="filter-dropdown" id="dd-label"></div></div>
+    <div class="filter-btn" data-filter="mood">mood<div class="filter-dropdown" id="dd-mood"></div></div>
+    <div class="filter-btn" data-filter="vocalist">vocalist<div class="filter-dropdown" id="dd-vocalist"></div></div>
   </div>
 
   <div id="tooltip">
@@ -802,73 +844,126 @@
     }
 
     // --- Filters ---
-    function populateFilters() {
-      var configs = [
-        { id: "filter-country", key: "countries", label: "country" },
-        { id: "filter-decade", key: "decades", label: "decade" },
-        { id: "filter-label", key: "labels", label: "label" },
-        { id: "filter-mood", key: "moods", label: "mood" },
-        { id: "filter-vocalist", key: "vocalists", label: "vocalist" },
-      ];
+    var openDropdown = null;
 
-      configs.forEach(function(cfg) {
-        var el = document.getElementById(cfg.id);
-        var items = facets[cfg.key];
+    var FACET_MAP = {
+      country: "countries",
+      decade: "decades",
+      label: "labels",
+      mood: "moods",
+      vocalist: "vocalists",
+    };
+
+    function populateFilters() {
+      Object.keys(FACET_MAP).forEach(function(cat) {
+        var dd = document.getElementById("dd-" + cat);
+        var items = facets[FACET_MAP[cat]];
         if (!items) return;
-        // Sort by number of associated genres (descending)
+
+        // Add search for long lists
+        if (Object.keys(items).length > 15) {
+          var searchDiv = document.createElement("div");
+          searchDiv.className = "filter-search";
+          var searchInput = document.createElement("input");
+          searchInput.placeholder = "search...";
+          searchInput.addEventListener("input", function() {
+            var q = this.value.toLowerCase();
+            dd.querySelectorAll(".filter-option").forEach(function(opt) {
+              opt.style.display = opt.dataset.value.includes(q) ? "" : "none";
+            });
+          });
+          searchInput.addEventListener("click", function(e) { e.stopPropagation(); });
+          searchDiv.appendChild(searchInput);
+          dd.appendChild(searchDiv);
+        }
+
         var sorted = Object.keys(items).sort(function(a, b) {
           return (items[b] || []).length - (items[a] || []).length;
         });
+
         sorted.forEach(function(val) {
-          var opt = document.createElement("option");
-          opt.value = val;
-          opt.textContent = val + " (" + (items[val] || []).length + ")";
-          el.appendChild(opt);
+          var div = document.createElement("div");
+          div.className = "filter-option";
+          div.dataset.value = val;
+          div.textContent = val + " (" + (items[val] || []).length + ")";
+          div.addEventListener("click", function(e) {
+            e.stopPropagation();
+            applyFilter(cat, val);
+            closeAllDropdowns();
+          });
+          dd.appendChild(div);
         });
       });
     }
 
-    function applyFilter(category, value) {
-      // Reset all selects except the active one
-      var selects = document.querySelectorAll(".filter-select");
-      selects.forEach(function(sel) {
-        if (sel.id !== "filter-" + category) {
-          sel.value = "";
-          sel.classList.remove("active");
-        }
-      });
+    function closeAllDropdowns() {
+      document.querySelectorAll(".filter-dropdown").forEach(function(d) { d.classList.remove("show"); });
+      document.querySelectorAll(".filter-btn").forEach(function(b) { b.classList.remove("open"); });
+      openDropdown = null;
+    }
 
-      if (!value) {
+    // Toggle dropdown on button click
+    document.querySelectorAll(".filter-btn").forEach(function(btn) {
+      btn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        var cat = btn.dataset.filter;
+        var dd = document.getElementById("dd-" + cat);
+        if (dd.classList.contains("show")) {
+          closeAllDropdowns();
+          return;
+        }
+        closeAllDropdowns();
+        dd.classList.add("show");
+        btn.classList.add("open");
+        openDropdown = cat;
+        // Focus search if present
+        var si = dd.querySelector("input");
+        if (si) si.focus();
+      });
+    });
+
+    // Close on outside click
+    document.addEventListener("click", function() { closeAllDropdowns(); });
+
+    function applyFilter(category, value) {
+      // Toggle off if same value
+      if (activeFilter && activeFilter.category === category && activeFilter.value === value) {
         activeFilter = null;
         filterHighlight = new Set();
-        document.querySelectorAll(".filter-select").forEach(function(s) { s.classList.remove("active"); });
+        document.querySelectorAll(".filter-btn").forEach(function(b) { b.classList.remove("active"); b.textContent = b.dataset.filter; });
+        // Re-add dropdowns (textContent wiped them)
+        rebuildFilterButtons();
         requestDraw();
         return;
       }
 
-      var catMap = {
-        country: "countries",
-        decade: "decades",
-        label: "labels",
-        mood: "moods",
-        vocalist: "vocalists",
-      };
-
-      var facetKey = catMap[category];
+      var facetKey = FACET_MAP[category];
       var genres = facets[facetKey] && facets[facetKey][value] ? facets[facetKey][value] : [];
       activeFilter = { category: category, value: value, genreSet: new Set(genres) };
       filterHighlight = activeFilter.genreSet;
 
-      document.getElementById("filter-" + category).classList.add("active");
+      // Update button states
+      document.querySelectorAll(".filter-btn").forEach(function(b) {
+        var cat = b.dataset.filter;
+        if (cat === category) {
+          b.classList.add("active");
+        } else {
+          b.classList.remove("active");
+        }
+      });
+
       requestDraw();
     }
 
-    // Wire up filter selects
-    ["country", "decade", "label", "mood", "vocalist"].forEach(function(cat) {
-      document.getElementById("filter-" + cat).addEventListener("change", function() {
-        applyFilter(cat, this.value);
+    function rebuildFilterButtons() {
+      document.querySelectorAll(".filter-btn").forEach(function(btn) {
+        var cat = btn.dataset.filter;
+        // Preserve the dropdown
+        var dd = document.getElementById("dd-" + cat);
+        btn.textContent = cat;
+        btn.appendChild(dd);
       });
-    });
+    }
 
     // --- Init ---
     resize();
